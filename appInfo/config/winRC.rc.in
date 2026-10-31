@@ -1,0 +1,53 @@
+#include <windows.h>
+#include "./../include/WinInfo.h"
+
+// ========== 应用程序图标 ==========
+IDI_ICON1 ICON DISCARDABLE winLogo.ico
+
+// .exe ID 必须为 1, .dll ID 必须为 2
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "winManifest.manifest"
+
+// ========== 版本信息 ==========
+VS_VERSION_INFO VERSIONINFO
+    //文件版本
+    FILEVERSION ${PROJECT_VERSION_MAJOR}, ${PROJECT_VERSION_MINOR}, ${PROJECT_VERSION_PATCH}
+    //产品版本
+    PRODUCTVERSION ${PROJECT_VERSION_MAJOR}, ${PROJECT_VERSION_MINOR}, ${PROJECT_VERSION_PATCH}
+#ifdef _DEBUG
+    FILEFLAGS VS_FF_DEBUG
+#else
+    FILEFLAGS 0x0L
+#endif
+    FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+    FILEOS          VOS_NT_WINDOWS32
+    FILETYPE        VFT_APP
+    FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        // 英语:040904b0, 中文:080404b0
+        BLOCK "080404b0"
+        BEGIN
+            //公司名
+            VALUE "CompanyName",        COMPANY_NAME
+            //版权
+            VALUE "LegalCopyright",     LEGAL_COPYRIGHT
+            //文件说明
+            VALUE "FileDescription",    FILE_DESCRIPTION
+            //内部名
+            VALUE "InternalName",       INTERNAL_NAME
+            //原始文件名
+            VALUE "OriginalFilename",   ORIGINAL_FILE_NAME
+            //产品名
+            VALUE "ProductName",        PRODUCT_NAME
+            //产品版本
+            VALUE "ProductVersion",     "${APP_VERSION}.0"
+            //文件版本
+            VALUE "FileVersion",        "${APP_VERSION}.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0804, 1200
+    END
+END

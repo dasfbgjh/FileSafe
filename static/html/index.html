@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark light">
+    <title>文件加密管理</title>
+    <script>
+        (function () {
+            var theme = "dark";
+            try {
+                var saved = localStorage.getItem("filesafe-theme");
+                if (saved === "light" || saved === "dark") {
+                    theme = saved;
+                } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) {
+                    theme = "light";
+                }
+            } catch (e) { }
+            document.documentElement.setAttribute("data-theme", theme);
+        })();
+    </script>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+
+<body>
+    <div class="app">
+        <header class="topbar">
+            <div class="brand">
+                <span class="logo">文件加密管理</span>
+                <span class="sub">AES-256-CTR</span>
+            </div>
+
+            <div class="actions">
+                <label class="inline" for="storeSel">目录</label>
+                <select id="storeSel" class="store-select"></select>
+                <button id="viewBtn">打开</button>
+            </div>
+
+            <div class="actions right">
+                <button id="encryptBtn" class="ghost">加密</button>
+                <button id="tasksBtn" class="ghost">后台任务</button>
+                <button id="themeBtn" class="theme-btn" title="切换浅色主题">
+                    <svg class="icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="8" cy="8" r="3.2" />
+                        <path d="M8 1.2v1.6M8 13.2v1.6M1.2 8h1.6M13.2 8h1.6M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1" />
+                    </svg>
+                    <svg class="icon-moon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M13.3 9.4A5.6 5.6 0 0 1 6.6 2.7a5.9 5.9 0 1 0 6.7 6.7Z" />
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <main class="workspace">
+            <aside class="sidebar">
+                <div id="sidebarHead" class="sidebar-head hidden">
+                    <div id="sessionInfo" class="session"></div>
+                    <button id="closeBtn" class="ghost tiny">关闭</button>
+                </div>
+                <div id="tree" class="tree">
+                    <div class="empty">请选择目录并点击「打开」</div>
+                </div>
+            </aside>
+
+            <section class="content">
+                <div id="viewer" class="viewer">
+                    <div class="empty">左侧选择文件后在此预览</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="modalMask" class="modal-mask hidden">
+        <div class="modal">
+            <div class="modal-head">
+                <span id="modalTitle">标题</span>
+                <button id="modalClose" class="ghost tiny" title="关闭">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"
+                        stroke-linecap="round">
+                        <path d="M4 4l8 8M12 4l-8 8" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+            <div id="modalMsg" class="msg"></div>
+            <div class="modal-foot">
+                <button id="modalCancel" class="ghost">取消</button>
+                <button id="modalSubmit">提交</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="encryptMask" class="modal-mask hidden">
+        <div class="modal">
+            <div class="modal-head">
+                <span>加密目录</span>
+                <button id="encryptClose" class="ghost tiny" title="关闭">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"
+                        stroke-linecap="round">
+                        <path d="M4 4l8 8M12 4l-8 8" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="field">
+                <label for="enc-dir">目录</label>
+                <input id="enc-dir" type="text" placeholder="待加密目录的绝对路径，例如 D:\documents\photos">
+            </div>
+            <div class="field">
+                <label for="enc-password">密码</label>
+                <input id="enc-password" type="password" placeholder="用于加密该目录的密码">
+            </div>
+            <div id="encMsg" class="msg"></div>
+            <div class="enc-actions">
+                <button id="encSubmit">开始加密</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="taskMask" class="modal-mask hidden">
+        <div class="modal wide">
+            <div class="modal-head">
+                <span>后台任务</span>
+                <button id="taskClose" class="ghost tiny" title="关闭">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"
+                        stroke-linecap="round">
+                        <path d="M4 4l8 8M12 4l-8 8" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="task-panel-head">
+                <span>任务状态</span>
+                <button id="taskRefresh" class="ghost tiny">刷新</button>
+            </div>
+            <div id="taskList" class="task-list"></div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="/js/app.js"></script>
+</body>
+
+</html>

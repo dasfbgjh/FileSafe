@@ -1,0 +1,42 @@
+#ifndef APPINFO_H
+#define APPINFO_H
+
+#include "./../include/AppExtension.hpp"
+
+#if ( WIN32 )
+#include "./../include/WinInfo.h"
+#endif
+
+// APP名称
+#define APP_NAME_CODE "${APP_NAME_CODE}"
+#define APP_NAME "WebView2 Demo"
+#define APP_DESCRIPTION "${PROJECT_DESCRIPTION}"
+
+// APP开发组织
+#define APP_ORG_CODE "${APP_ORG_CODE}"
+#define APP_ORG_NAME ""
+
+// APP主页
+#define APP_WEB_URL "${PROJECT_HOMEPAGE_URL}"
+
+// APP开发者
+#define APP_DEVELOPER ""
+
+// APP调试模式开关
+// clang-format off
+#define APP_DEBUG_MODE 1
+#define APP_BUILD_RELEASE ${APP_BUILD_RELEASE}
+// clang-format on
+
+// APP版本信息(版本号同步项目版本号)
+#define APP_VERSION "${APP_VERSION}"
+// clang-format off
+#define APP_VERSION_CODE ${APP_VERSION_CODE}
+// clang-format on
+
+// APP更新日志
+#define APP_UPDATE_LOG "1.修复了一些bug\n"  \
+                       "2.优化了一些性能\n" \
+                       "3.新增了一些功能"
+
+#endif
