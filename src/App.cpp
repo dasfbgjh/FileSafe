@@ -1,13 +1,15 @@
 #include "App.h"
+#include "Logger.hpp"
 #include "Utils.h"
 
 #include <boost/json.hpp>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
-#include <iostream>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -44,7 +46,7 @@ bool App::run( unsigned short port ) {
     registerRoutes();
 
     if ( !m_server.listen( "127.0.0.1", port ) ) {
-        std::cerr << "Failed to listen on port " << port << std::endl;
+        LOG_ERROR << "Failed to listen on port " + std::to_string( port );
         return false;
     }
 
@@ -54,8 +56,8 @@ bool App::run( unsigned short port ) {
 
     m_queue.start();
 
-    std::cout << "Server started: http://127.0.0.1:" << port << std::endl;
-    std::cout << "Data directory: " << ( m_baseDir / "data" ).string() << std::endl;
+    LOG_INFO << "Server started: http://127.0.0.1:" + std::to_string( port );
+    LOG_INFO << "Data directory: " + ( m_baseDir / "data" ).u8string();
 
     m_server.getIoContext().run();
 
@@ -75,6 +77,7 @@ void App::registerRoutes() {
     m_server.post( "/api/open", [this]( const Request &req, Response &resp ) { handleOpen( req, resp ); } );
     m_server.post( "/api/add", [this]( const Request &req, Response &resp ) { handleAdd( req, resp ); } );
     m_server.post( "/api/delete", [this]( const Request &req, Response &resp ) { handleDelete( req, resp ); } );
+    m_server.post( "/api/export", [this]( const Request &req, Response &resp ) { handleExport( req, resp ); } );
     m_server.get( "/api/file", [this]( const Request &req, Response &resp ) { handleFile( req, resp ); } );
     m_server.get( "/api/files", [this]( const Request &req, Response &resp ) { handleFiles( req, resp ); } );
     m_server.get( "*", [this]( const Request &req, Response &resp ) { handleStatic( req, resp ); } );
@@ -108,7 +111,8 @@ void App::handleEncrypt( const Request &req, Response &resp ) {
     }
 
     std::error_code ec;
-    if ( !fs::exists( fs::path( dir ), ec ) || !fs::is_directory( fs::path( dir ), ec ) ) {
+    fs::path sourceDir = utils::toPath( dir );
+    if ( !fs::exists( sourceDir, ec ) || !fs::is_directory( sourceDir, ec ) ) {
         fail( resp, 400, "Bad Request", "待加密目录不存在或不是目录: " + dir );
         return;
     }
@@ -226,13 +230,13 @@ void App::handleAdd( const Request &req, Response &resp ) {
         return;
     }
 
-    std::string name = fs::path( path ).filename().string();
+    std::string name = utils::toPath( path ).filename().u8string();
     if ( name.empty() ) {
         name = path;
     }
     std::string title = "添加 " + name + " 到 " + ( target.empty() ? "根目录" : target );
 
-    std::string id = m_queue.submitAdd( session.dir, session.password, target, fs::path( path ), title );
+    std::string id = m_queue.submitAdd( session.dir, session.password, target, utils::toPath( path ), title );
     if ( id.empty() ) {
         fail( resp, 500, "Internal Server Error", "加入任务队列失败" );
         return;
@@ -282,6 +286,58 @@ void App::handleDelete( const Request &req, Response &resp ) {
     root["ok"] = true;
     root["id"] = utils::toJsonString( id );
     root["state"] = "queued";
+    resp.setStatus( 202, "Accepted" );
+    resp.setJson( boost::json::serialize( root ) );
+}
+
+void App::handleExport( const Request &req, Response &resp ) {
+    boost::json::object body;
+    if ( !utils::parseJsonObject( req.body, body ) ) {
+        fail( resp, 400, "Bad Request", "请求体格式错误" );
+        return;
+    }
+
+    std::string token = utils::jsonStringField( body, "token" );
+    std::string path = utils::jsonStringField( body, "path" );
+    if ( token.empty() ) {
+        fail( resp, 401, "Unauthorized", "缺少会话令牌" );
+        return;
+    }
+
+    Session session;
+    if ( !m_sessions.get( token, session ) ) {
+        fail( resp, 401, "Unauthorized", "会话已失效，请重新输入密码打开目录" );
+        return;
+    }
+
+    std::string prefix = path.empty() ? std::string() : path + "/";
+    bool matched = false;
+    for ( const auto &[id, entry] : session.files ) {
+        if ( path.empty() || entry.path == path ||
+             entry.path.compare( 0, prefix.size(), prefix ) == 0 ) {
+            matched = true;
+            break;
+        }
+    }
+    if ( !matched ) {
+        fail( resp, 404, "Not Found", "目录中没有可导出的文件" );
+        return;
+    }
+
+    fs::path destRoot = m_baseDir / "output" / utils::toPath( session.dir );
+    std::string title = "导出 " + ( path.empty() ? session.dir : path ) + " 到 output";
+
+    std::string id = m_queue.submitExport( session.dir, session.password, path, destRoot, title );
+    if ( id.empty() ) {
+        fail( resp, 500, "Internal Server Error", "加入任务队列失败" );
+        return;
+    }
+
+    boost::json::object root;
+    root["ok"] = true;
+    root["id"] = utils::toJsonString( id );
+    root["state"] = "queued";
+    root["dest"] = utils::toJsonString( destRoot.u8string() );
     resp.setStatus( 202, "Accepted" );
     resp.setJson( boost::json::serialize( root ) );
 }
@@ -348,21 +404,25 @@ void App::handleFile( const Request &req, Response &resp ) {
         return;
     }
 
-    std::string content;
     std::string error;
-    if ( !m_store.readFile( session.dir, entry, session.password, offset, length, content, error ) ) {
+    std::shared_ptr<cryptostore::FileStream> stream =
+        m_store.openStream( session.dir, entry, session.password, offset, length, error );
+    if ( !stream ) {
         fail( resp, 500, "Internal Server Error", error );
         return;
     }
 
     bool download = req.params.count( "download" ) > 0 && req.params.at( "download" ) == "1";
+    std::string contentType = HttpServer::contentType( utils::toPath( entry.path ) );
 
-    resp.body = std::move( content );
-    resp.headers["Content-Type"] = HttpServer::contentType( fs::path( entry.path ) );
+    resp.setStream( length, [stream]( std::string &chunk, std::size_t maxSize ) {
+        return stream->read( chunk, maxSize );
+    } );
+    resp.headers["Content-Type"] = contentType;
     resp.headers["Content-Disposition"] = utils::contentDisposition( download, entry.path );
     resp.headers["X-Content-Type-Options"] = "nosniff";
     resp.headers["Accept-Ranges"] = "bytes";
-    if ( !download ) {
+    if ( !download && contentType != "application/pdf" ) {
         resp.headers["Content-Security-Policy"] = "sandbox";
     }
 
@@ -380,7 +440,7 @@ bool App::serveResource( Response &resp, const std::string &resName ) {
         return false;
     }
     resp.body = std::move( content );
-    resp.headers["Content-Type"] = HttpServer::contentType( fs::path( resName ) );
+    resp.headers["Content-Type"] = HttpServer::contentType( utils::toPath( resName ) );
     return true;
 }
 

@@ -1,5 +1,6 @@
 #include "CryptoStore.h"
 #include "CryptoFile.h"
+#include "Utils.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -67,6 +68,44 @@ bool normalizeRelativePath( const std::string &text, std::string &out ) {
 
 } // namespace
 
+FileStream::FileStream( std::unique_ptr<CryptoFile> file, std::uint64_t remaining )
+    : m_file( std::move( file ) ), m_remaining( remaining ) {
+}
+
+FileStream::~FileStream() = default;
+
+bool FileStream::read( std::string &chunk, std::size_t maxSize ) {
+    chunk.clear();
+
+    if ( m_remaining == 0 ) {
+        return false;
+    }
+    if ( !m_file ) {
+        m_remaining = 0;
+        return false;
+    }
+
+    std::size_t want = static_cast<std::size_t>(
+        std::min<std::uint64_t>( m_remaining, static_cast<std::uint64_t>( maxSize ) ) );
+    std::size_t got = m_file->read( chunk, want );
+    if ( got == 0 ) {
+        m_remaining = 0;
+        return false;
+    }
+
+    m_remaining -= got;
+    return true;
+}
+
+std::uint64_t FileStream::remaining() const {
+    return m_remaining;
+}
+
+const std::string &FileStream::lastError() const {
+    static const std::string empty;
+    return m_file ? m_file->lastError() : empty;
+}
+
 Store::Store( fs::path dataDir )
     : m_dataDir( std::move( dataDir ) ) {
 }
@@ -90,7 +129,7 @@ std::vector<std::string> Store::listStores() const {
         if ( !fs::exists( entry.path() / CONFIG_NAME, ec ) ) {
             continue;
         }
-        names.push_back( entry.path().filename().string() );
+        names.push_back( entry.path().filename().u8string() );
     }
 
     std::sort( names.begin(), names.end() );
@@ -122,7 +161,7 @@ bool Store::encryptDirectory( const fs::path &sourceDir,
 
     std::error_code ec;
     if ( !fs::exists( sourceDir, ec ) || !fs::is_directory( sourceDir, ec ) ) {
-        error = "待加密目录不存在或不是目录: " + sourceDir.string();
+        error = "待加密目录不存在或不是目录: " + sourceDir.u8string();
         return false;
     }
 
@@ -132,13 +171,13 @@ bool Store::encryptDirectory( const fs::path &sourceDir,
         ec.clear();
     }
 
-    std::string name = normalized.filename().string();
+    std::string name = normalized.filename().u8string();
     if ( !isValidName( name ) ) {
         error = "目录名不合法: " + name;
         return false;
     }
 
-    fs::path destDir = m_dataDir / name;
+    fs::path destDir = m_dataDir / utils::toPath( name );
     if ( fs::exists( destDir / CONFIG_NAME, ec ) ) {
         error = "同名加密目录已存在: " + name;
         return false;
@@ -150,7 +189,7 @@ bool Store::encryptDirectory( const fs::path &sourceDir,
         if ( !it->is_regular_file( ec ) ) {
             continue;
         }
-        std::string relative = fs::relative( it->path(), sourceDir, ec ).generic_string();
+        std::string relative = fs::relative( it->path(), sourceDir, ec ).generic_u8string();
         if ( ec ) {
             ec.clear();
             continue;
@@ -178,7 +217,7 @@ bool Store::encryptDirectory( const fs::path &sourceDir,
 
     fs::create_directories( destDir, ec );
     if ( ec ) {
-        error = "无法创建目录: " + destDir.string();
+        error = "无法创建目录: " + destDir.u8string();
         return false;
     }
 
@@ -204,7 +243,7 @@ bool Store::encryptDirectory( const fs::path &sourceDir,
             progress( state );
         }
 
-        CryptoFile out( target.string(), password, CryptoFile::Mode::Write );
+        CryptoFile out( target, password, CryptoFile::Mode::Write );
         if ( !out.isOpen() ) {
             error = "加密失败: " + out.lastError();
             fs::remove_all( destDir, ec );
@@ -213,7 +252,7 @@ bool Store::encryptDirectory( const fs::path &sourceDir,
 
         std::ifstream in( sourcePath, std::ios::binary );
         if ( !in.is_open() ) {
-            error = "无法读取文件: " + sourcePath.string();
+            error = "无法读取文件: " + sourcePath.u8string();
             fs::remove_all( destDir, ec );
             return false;
         }
@@ -237,7 +276,7 @@ bool Store::encryptDirectory( const fs::path &sourceDir,
         }
 
         if ( in.bad() ) {
-            error = "读取文件失败: " + sourcePath.string();
+            error = "读取文件失败: " + sourcePath.u8string();
             fs::remove_all( destDir, ec );
             return false;
         }
@@ -287,14 +326,14 @@ bool Store::openStore( const std::string &name,
         return false;
     }
 
-    fs::path configPath = m_dataDir / name / CONFIG_NAME;
+    fs::path configPath = m_dataDir / utils::toPath( name ) / CONFIG_NAME;
     std::error_code ec;
     if ( !fs::exists( configPath, ec ) ) {
         error = "加密目录不存在: " + name;
         return false;
     }
 
-    CryptoFile config( configPath.string(), password, CryptoFile::Mode::Read );
+    CryptoFile config( configPath, password, CryptoFile::Mode::Read );
     if ( !config.isOpen() ) {
         error = config.lastError();
         return false;
@@ -340,9 +379,9 @@ bool Store::readFile( const std::string &name,
         length = entry.size - offset;
     }
 
-    fs::path filePath = m_dataDir / name / ( std::to_string( entry.id ) + DATA_SUFFIX );
+    fs::path filePath = m_dataDir / utils::toPath( name ) / ( std::to_string( entry.id ) + DATA_SUFFIX );
 
-    CryptoFile file( filePath.string(), password, CryptoFile::Mode::Read );
+    CryptoFile file( filePath, password, CryptoFile::Mode::Read );
     if ( !file.isOpen() ) {
         error = file.lastError();
         return false;
@@ -376,13 +415,47 @@ bool Store::readFile( const std::string &name,
     return true;
 }
 
+std::shared_ptr<FileStream> Store::openStream( const std::string &name,
+                                               const FileEntry &entry,
+                                               const std::string &password,
+                                               std::uint64_t offset,
+                                               std::uint64_t length,
+                                               std::string &error ) const {
+    error.clear();
+
+    if ( offset >= entry.size ) {
+        return std::make_shared<FileStream>( nullptr, 0 );
+    }
+    if ( length > entry.size - offset ) {
+        length = entry.size - offset;
+    }
+    if ( length == 0 ) {
+        return std::make_shared<FileStream>( nullptr, 0 );
+    }
+
+    fs::path filePath = m_dataDir / utils::toPath( name ) / ( std::to_string( entry.id ) + DATA_SUFFIX );
+
+    auto file = std::make_unique<CryptoFile>( filePath, password, CryptoFile::Mode::Read );
+    if ( !file->isOpen() ) {
+        error = file->lastError();
+        return nullptr;
+    }
+
+    if ( offset > 0 && !file->seek( offset ) ) {
+        error = file->lastError();
+        return nullptr;
+    }
+
+    return std::make_shared<FileStream>( std::move( file ), length );
+}
+
 bool Store::writeConfig( const std::string &name,
                          const std::string &password,
                          const StoreInfo &info,
                          std::string &error ) const {
-    fs::path configPath = m_dataDir / name / CONFIG_NAME;
+    fs::path configPath = m_dataDir / utils::toPath( name ) / CONFIG_NAME;
 
-    CryptoFile config( configPath.string(), password, CryptoFile::Mode::Write );
+    CryptoFile config( configPath, password, CryptoFile::Mode::Write );
     if ( !config.isOpen() ) {
         error = "写入配置文件失败: " + config.lastError();
         return false;
@@ -417,7 +490,7 @@ bool Store::addPath( const std::string &name,
 
     std::error_code ec;
     if ( !fs::exists( sourcePath, ec ) ) {
-        error = "路径不存在: " + sourcePath.string();
+        error = "路径不存在: " + sourcePath.u8string();
         return false;
     }
 
@@ -436,9 +509,9 @@ bool Store::addPath( const std::string &name,
 
     std::vector<std::pair<std::string, fs::path>> incoming;
     if ( fs::is_directory( sourcePath, ec ) ) {
-        std::string rootName = sourcePath.filename().string();
+        std::string rootName = sourcePath.filename().u8string();
         if ( rootName.empty() ) {
-            rootName = sourcePath.parent_path().filename().string();
+            rootName = sourcePath.parent_path().filename().u8string();
         }
         std::string targetRoot = targetDir.empty() ? rootName : targetDir + "/" + rootName;
 
@@ -447,7 +520,7 @@ bool Store::addPath( const std::string &name,
                 ec.clear();
                 continue;
             }
-            std::string relative = fs::relative( it->path(), sourcePath, ec ).generic_string();
+            std::string relative = fs::relative( it->path(), sourcePath, ec ).generic_u8string();
             if ( ec ) {
                 ec.clear();
                 continue;
@@ -459,10 +532,10 @@ bool Store::addPath( const std::string &name,
             return false;
         }
     } else if ( fs::is_regular_file( sourcePath, ec ) ) {
-        std::string fileName = sourcePath.filename().string();
+        std::string fileName = sourcePath.filename().u8string();
         incoming.emplace_back( targetDir.empty() ? fileName : targetDir + "/" + fileName, sourcePath );
     } else {
-        error = "不是可添加的文件或目录: " + sourcePath.string();
+        error = "不是可添加的文件或目录: " + sourcePath.u8string();
         return false;
     }
 
@@ -488,7 +561,7 @@ bool Store::addPath( const std::string &name,
         }
     }
 
-    fs::path destDir = m_dataDir / name;
+    fs::path destDir = m_dataDir / utils::toPath( name );
     StoreInfo updated = current;
     std::vector<int> written;
 
@@ -516,7 +589,7 @@ bool Store::addPath( const std::string &name,
             progress( state );
         }
 
-        CryptoFile out( target.string(), password, CryptoFile::Mode::Write );
+        CryptoFile out( target, password, CryptoFile::Mode::Write );
         if ( !out.isOpen() ) {
             error = "加密失败: " + out.lastError();
             break;
@@ -525,8 +598,7 @@ bool Store::addPath( const std::string &name,
 
         std::ifstream in( filePath, std::ios::binary );
         if ( !in.is_open() ) {
-            out.close();
-            error = "无法读取文件: " + filePath.string();
+            error = "无法读取文件: " + filePath.u8string();
             break;
         }
 
@@ -552,7 +624,7 @@ bool Store::addPath( const std::string &name,
         }
         if ( in.bad() ) {
             out.close();
-            error = "读取文件失败: " + filePath.string();
+            error = "读取文件失败: " + filePath.u8string();
             break;
         }
 
@@ -656,7 +728,7 @@ bool Store::removePath( const std::string &name,
         return false;
     }
 
-    fs::path destDir = m_dataDir / name;
+    fs::path destDir = m_dataDir / utils::toPath( name );
     std::error_code ec;
     for ( const auto &[id, path] : removed ) {
         state.current = path;
@@ -672,6 +744,150 @@ bool Store::removePath( const std::string &name,
     }
 
     info = std::move( updated );
+    return true;
+}
+
+bool Store::exportPath( const std::string &name,
+                        const std::string &password,
+                        const std::string &relativePath,
+                        const fs::path &destRoot,
+                        std::string &error,
+                        const ProgressCallback &progress ) const {
+    if ( !isValidName( name ) ) {
+        error = "目录名不合法";
+        return false;
+    }
+    if ( password.empty() ) {
+        error = "密码不能为空";
+        return false;
+    }
+
+    std::string target;
+    if ( !normalizeRelativePath( relativePath, target ) ) {
+        error = "路径不合法";
+        return false;
+    }
+
+    StoreInfo current;
+    std::string openError;
+    if ( !openStore( name, password, current, openError ) ) {
+        error = openError;
+        return false;
+    }
+
+    std::string prefix = target.empty() ? std::string() : target + "/";
+    std::vector<FileEntry> selected;
+    for ( const auto &entry : current.files ) {
+        if ( target.empty() || entry.path == target ||
+             entry.path.compare( 0, prefix.size(), prefix ) == 0 ) {
+            selected.push_back( entry );
+        }
+    }
+
+    if ( selected.empty() ) {
+        error = "该目录下没有可导出的文件: " + ( target.empty() ? name : target );
+        return false;
+    }
+
+    std::sort( selected.begin(), selected.end(), []( const FileEntry &a, const FileEntry &b ) {
+        return a.path < b.path;
+    } );
+
+    std::error_code ec;
+    fs::create_directories( destRoot, ec );
+    if ( ec ) {
+        error = "无法创建导出目录: " + destRoot.u8string() + " (" + ec.message() + ")";
+        return false;
+    }
+
+    Progress state;
+    state.filesTotal = selected.size();
+    for ( const auto &entry : selected ) {
+        state.bytesTotal += entry.size;
+    }
+    if ( progress ) {
+        progress( state );
+    }
+
+    std::vector<fs::path> written;
+
+    for ( const auto &entry : selected ) {
+        state.current = entry.path;
+        if ( progress ) {
+            progress( state );
+        }
+
+        fs::path outPath = destRoot / utils::toPath( entry.path );
+        fs::create_directories( outPath.parent_path(), ec );
+        if ( ec ) {
+            error = "无法创建导出目录: " + outPath.parent_path().u8string() + " (" + ec.message() + ")";
+            break;
+        }
+
+        fs::path srcPath = m_dataDir / utils::toPath( name ) / ( std::to_string( entry.id ) + DATA_SUFFIX );
+        CryptoFile in( srcPath, password, CryptoFile::Mode::Read );
+        if ( !in.isOpen() ) {
+            error = "解密失败: " + entry.path + " (" + in.lastError() + ")";
+            break;
+        }
+
+        std::ofstream out( outPath, std::ios::binary | std::ios::trunc );
+        if ( !out.is_open() ) {
+            error = "无法写入文件: " + outPath.u8string();
+            break;
+        }
+        written.push_back( outPath );
+
+        std::string chunk;
+        std::uint64_t remaining = entry.size;
+        bool failed = false;
+        while ( remaining > 0 ) {
+            std::size_t want = static_cast<std::size_t>(
+                std::min<std::uint64_t>( remaining, 1u << 20 ) );
+            std::size_t got = in.read( chunk, want );
+            if ( got == 0 ) {
+                break;
+            }
+            out.write( chunk.data(), static_cast<std::streamsize>( got ) );
+            if ( !out.good() ) {
+                failed = true;
+                break;
+            }
+            remaining -= got;
+            state.bytesDone += static_cast<std::uint64_t>( got );
+            if ( progress ) {
+                progress( state );
+            }
+        }
+        out.close();
+
+        if ( failed ) {
+            error = "写入导出文件失败: " + outPath.u8string();
+            break;
+        }
+        if ( !in.lastError().empty() ) {
+            error = "解密失败: " + entry.path + " (" + in.lastError() + ")";
+            break;
+        }
+        if ( remaining > 0 ) {
+            error = "解密数据不完整: " + entry.path;
+            break;
+        }
+
+        ++state.filesDone;
+        if ( progress ) {
+            progress( state );
+        }
+    }
+
+    if ( !error.empty() ) {
+        for ( const auto &path : written ) {
+            fs::remove( path, ec );
+            ec.clear();
+        }
+        return false;
+    }
+
     return true;
 }
 

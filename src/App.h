@@ -36,6 +36,7 @@ private:
     void handleOpen( const http::HttpServer::Request &req, http::HttpServer::Response &resp );
     void handleAdd( const http::HttpServer::Request &req, http::HttpServer::Response &resp );
     void handleDelete( const http::HttpServer::Request &req, http::HttpServer::Response &resp );
+    void handleExport( const http::HttpServer::Request &req, http::HttpServer::Response &resp );
     void handleFiles( const http::HttpServer::Request &req, http::HttpServer::Response &resp );
     void handleFile( const http::HttpServer::Request &req, http::HttpServer::Response &resp );
     void handleStatic( const http::HttpServer::Request &req, http::HttpServer::Response &resp );

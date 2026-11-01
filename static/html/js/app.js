@@ -28,11 +28,12 @@ function toggleTheme() {
 updateThemeButton(currentTheme());
 
 const TEXT_EXT = ["txt", "md", "markdown", "log", "json", "js", "mjs", "cjs", "ts", "css", "scss",
-    "html", "htm", "xml", "yml", "yaml", "ini", "conf", "cfg", "csv", "tsv", "lrc","c", "h", "hpp",
-    "cpp", "cc", "py", "java", "go", "rs", "sh", "bat", "ps1", "sql", "toml", "gitignore"];
+    "html", "htm", "xml", "yml", "yaml", "ini", "conf", "cfg", "csv", "tsv", "lrc", "c", "h", "hpp",
+    "cpp", "cc", "py", "java", "go", "dart", "rs", "sh", "bat", "ps1", "sql", "toml", "gitignore"];
 const IMAGE_EXT = ["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg", "ico", "avif"];
 const AUDIO_EXT = ["mp3", "wav", "ogg", "oga", "m4a", "aac", "flac", "opus"];
 const VIDEO_EXT = ["mp4", "webm", "ogv", "m4v", "mov", "mkv", "avi"];
+const PDF_EXT = ["pdf"];
 
 let token = "";
 let currentDir = "";
@@ -61,6 +62,7 @@ function kindOf(path) {
     if (IMAGE_EXT.includes(ext)) return "image";
     if (AUDIO_EXT.includes(ext)) return "audio";
     if (VIDEO_EXT.includes(ext)) return "video";
+    if (PDF_EXT.includes(ext)) return "pdf";
     if (TEXT_EXT.includes(ext)) return "text";
     return "other";
 }
@@ -90,6 +92,11 @@ const ICONS = {
     video: SVG_HEAD +
         '<rect x="2.1" y="3.5" width="11.8" height="9" rx="1.1"/>' +
         '<path d="M6.6 6.4 10.1 8 6.6 9.6Z"/>' +
+        '</svg>',
+    pdf: SVG_HEAD +
+        '<path d="M3.6 2.3h5.1l3.7 3.7v7.7a.8.8 0 0 1-.8.8H3.6a.8.8 0 0 1-.8-.8V3.1a.8.8 0 0 1 .8-.8Z"/>' +
+        '<path d="M8.5 2.4v3.6h3.6"/>' +
+        '<path d="M5.8 11.3V6.9h1.2a1.1 1.1 0 0 1 0 2.2H5.8"/>' +
         '</svg>',
     other: SVG_HEAD +
         '<circle cx="8" cy="8" r="5.8"/>' +
@@ -342,6 +349,16 @@ function buildRow(node, depth) {
             openAddPathModal(node.path);
         });
         ops.appendChild(addBtn);
+
+        const exportBtn = document.createElement("button");
+        exportBtn.className = "icon-btn";
+        exportBtn.textContent = "导出";
+        exportBtn.title = "导出该目录到 output";
+        exportBtn.addEventListener("click", event => {
+            event.stopPropagation();
+            exportPath(node);
+        });
+        ops.appendChild(exportBtn);
     }
 
     const delBtn = document.createElement("button");
@@ -497,6 +514,26 @@ async function preview(file) {
         return;
     }
 
+    if (kind === "pdf") {
+        const panel = document.createElement("div");
+        panel.className = "empty stack";
+
+        const note = document.createElement("div");
+        note.textContent = "PDF 文件将由浏览器自带的阅读器显示";
+
+        const open = document.createElement("button");
+        open.className = "ghost";
+        open.textContent = "在浏览器中打开 PDF";
+        open.addEventListener("click", () => {
+            window.open(fileUrl(file.id, false), "_blank");
+        });
+
+        panel.appendChild(note);
+        panel.appendChild(open);
+        stage.appendChild(panel);
+        return;
+    }
+
     if (kind === "text") {
         if (file.size > 4 * 1024 * 1024) {
             const note = document.createElement("div");
@@ -537,7 +574,7 @@ function stateLabel(task) {
     if (task.state === "queued") return "排队中";
     if (task.state === "failed") return "失败";
     if (task.state === "running") {
-        return { encrypt: "加密中", add: "添加中", remove: "删除中" }[task.kind] || "处理中";
+        return { encrypt: "加密中", add: "添加中", remove: "删除中", export: "导出中" }[task.kind] || "处理中";
     }
     return task.state;
 }
@@ -809,7 +846,7 @@ async function submitEncrypt() {
         }
         $("enc-dir").value = "";
         $("enc-password").value = "";
-        showMsg(msg, "已提交加密任务", "ok");
+        closeEncryptModal();
         showToast("已提交加密任务，可在「后台任务」查看进度");
         startPolling();
     } catch (e) {
@@ -882,6 +919,25 @@ function openAddPathModal(targetDir) {
             return "";
         }
     });
+}
+
+async function exportPath(node) {
+    if (!token) {
+        showModalOnlyMessage("请先打开一个加密目录");
+        return;
+    }
+
+    const data = await postJson("/api/export", { token, path: node.path });
+    if (!data.ok) {
+        if (isSessionExpired(data)) resetSession();
+        window.alert(data.error || "导出失败");
+        return;
+    }
+
+    if (data.id) watchedTasks.add(data.id);
+    showToast("已加入任务队列：导出 " + (node.name || currentDir));
+    startPolling();
+    await refreshTasks();
 }
 
 async function deletePath(node) {

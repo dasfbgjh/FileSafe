@@ -13,6 +13,13 @@
 
 #include <openssl/rand.h>
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 namespace utils {
 
 namespace fs = std::filesystem;
@@ -24,10 +31,30 @@ fs::path g_appDirectory;
 } // namespace
 
 void setAppDirectory( const char *argv0 ) {
+#ifdef _WIN32
+    std::vector<wchar_t> buffer( 260 );
+    while ( buffer.size() <= 32768 ) {
+        DWORD len = GetModuleFileNameW( nullptr, buffer.data(),
+                                        static_cast<DWORD>( buffer.size() ) );
+        if ( len == 0 ) {
+            break;
+        }
+        if ( len < buffer.size() ) {
+            fs::path exe( std::wstring( buffer.data(), len ) );
+            if ( !exe.parent_path().empty() ) {
+                g_appDirectory = exe.parent_path();
+                return;
+            }
+            break;
+        }
+        buffer.resize( buffer.size() * 2 );
+    }
+#endif
+
     std::error_code ec;
     if ( argv0 && *argv0 ) {
-        fs::path exe = fs::absolute( fs::path( argv0 ), ec );
-        if ( !ec ) {
+        fs::path exe = fs::absolute( toPath( argv0 ), ec );
+        if ( !ec && !exe.parent_path().empty() ) {
             g_appDirectory = exe.parent_path();
             return;
         }
@@ -42,6 +69,21 @@ const fs::path &appDirectory() {
         setAppDirectory( nullptr );
     }
     return g_appDirectory;
+}
+
+fs::path toPath( const std::string &utf8 ) {
+    if ( utf8.empty() ) {
+        return fs::path();
+    }
+    try {
+        return fs::u8path( utf8 );
+    } catch ( ... ) {
+        return fs::path();
+    }
+}
+
+std::string toUtf8( const fs::path &path ) {
+    return path.u8string();
 }
 
 std::string randomHex( std::size_t bytes ) {
@@ -239,7 +281,7 @@ std::string urlDecode( const std::string &text ) {
 }
 
 std::string contentDisposition( bool download, const std::string &path ) {
-    std::string name = fs::path( path ).filename().string();
+    std::string name = toPath( path ).filename().u8string();
     if ( name.empty() ) {
         name = "file";
     }
@@ -266,13 +308,13 @@ std::string contentDisposition( bool download, const std::string &path ) {
 namespace {
 
 fs::path resourceRoot() {
-    static const fs::path root = fs::path( RESOURCE_PATH ).lexically_normal();
+    static const fs::path root = toPath( RESOURCE_PATH ).lexically_normal();
     return root;
 }
 
 bool resolveLocalResource( const std::string &resName, fs::path &fullPath ) {
     fs::path relative;
-    for ( const fs::path &part : fs::path( resName ) ) {
+    for ( const fs::path &part : toPath( resName ) ) {
         if ( part == ".." || part.has_root_name() ) {
             return false;
         }

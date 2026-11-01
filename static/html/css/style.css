@@ -365,6 +365,7 @@ label.inline {
 .tree-row .icon-image { color: #34d399; }
 .tree-row .icon-audio { color: #c084fc; }
 .tree-row .icon-video { color: #fb7185; }
+.tree-row .icon-pdf { color: #f87171; }
 .tree-row .icon-other { color: var(--icon-muted); }
 
 :root[data-theme="light"] .tree-row .icon-folder { color: #d97706; }
@@ -372,6 +373,7 @@ label.inline {
 :root[data-theme="light"] .tree-row .icon-image { color: #059669; }
 :root[data-theme="light"] .tree-row .icon-audio { color: #7c3aed; }
 :root[data-theme="light"] .tree-row .icon-video { color: #e11d48; }
+:root[data-theme="light"] .tree-row .icon-pdf { color: #dc2626; }
 
 .tree-row .name {
     flex: 1;
@@ -619,6 +621,13 @@ label {
     font-size: 13px;
 }
 
+.empty.stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
 .msg {
     margin-top: 12px;
     padding: 9px 12px;
@@ -637,7 +646,7 @@ label {
 .toast {
     position: fixed;
     left: 50%;
-    bottom: 32px;
+    top: 32px;
     transform: translateX(-50%);
     padding: 9px 18px;
     border-radius: 6px;

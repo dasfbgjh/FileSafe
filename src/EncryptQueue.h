@@ -19,7 +19,8 @@
 enum class TaskKind {
     Encrypt,
     Add,
-    Remove
+    Remove,
+    Export
 };
 
 struct EncryptTask {
@@ -70,6 +71,12 @@ public:
                               const std::string &path,
                               const std::string &title );
 
+    std::string submitExport( const std::string &store,
+                              const std::string &password,
+                              const std::string &path,
+                              const std::filesystem::path &destRoot,
+                              const std::string &title );
+
     std::vector<EncryptTask> list( std::uint64_t &finished ) const;
 
 private:
@@ -82,6 +89,7 @@ private:
         std::string targetDir;
         std::string path;
         std::filesystem::path source;
+        std::filesystem::path dest;
     };
 
     std::string submitJob( Job job, const std::string &title );

@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <string>
 
@@ -16,7 +17,7 @@ public:
         Write
     };
 
-    CryptoFile( const std::string &path, const std::string &password, Mode mode );
+    CryptoFile( const std::filesystem::path &path, const std::string &password, Mode mode );
     ~CryptoFile();
 
     CryptoFile( const CryptoFile &other ) = delete;
@@ -42,8 +43,8 @@ public:
     const std::string &lastError() const;
 
 private:
-    bool openForWrite( const std::string &path, const std::string &password );
-    bool openForRead( const std::string &path, const std::string &password );
+    bool openForWrite( const std::filesystem::path &path, const std::string &password );
+    bool openForRead( const std::filesystem::path &path, const std::string &password );
     bool writeHeader();
     bool readHeader();
     bool deriveKey( const std::string &password, const unsigned char *salt );

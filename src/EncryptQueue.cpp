@@ -12,6 +12,8 @@ const char *kindName( TaskKind kind ) {
         return "add";
     case TaskKind::Remove:
         return "remove";
+    case TaskKind::Export:
+        return "export";
     default:
         return "encrypt";
     }
@@ -58,6 +60,7 @@ std::string EncryptQueue::submitEncrypt( const std::string &dir, const std::stri
     Job job;
     job.kind = TaskKind::Encrypt;
     job.dir = dir;
+    job.source = utils::toPath( dir );
     job.password = password;
     return submitJob( std::move( job ), {} );
 }
@@ -85,6 +88,20 @@ std::string EncryptQueue::submitRemove( const std::string &store,
     job.store = store;
     job.password = password;
     job.path = path;
+    return submitJob( std::move( job ), title );
+}
+
+std::string EncryptQueue::submitExport( const std::string &store,
+                                        const std::string &password,
+                                        const std::string &path,
+                                        const std::filesystem::path &destRoot,
+                                        const std::string &title ) {
+    Job job;
+    job.kind = TaskKind::Export;
+    job.store = store;
+    job.password = password;
+    job.path = path;
+    job.dest = destRoot;
     return submitJob( std::move( job ), title );
 }
 
@@ -176,12 +193,15 @@ void EncryptQueue::runJob( const Job &job ) {
     case TaskKind::Remove:
         ok = m_store.removePath( job.store, job.password, job.path, info, error, progress );
         break;
+    case TaskKind::Export:
+        ok = m_store.exportPath( job.store, job.password, job.path, job.dest, error, progress );
+        break;
     default:
-        ok = m_store.encryptDirectory( job.dir, job.password, info, error, progress );
+        ok = m_store.encryptDirectory( job.source, job.password, info, error, progress );
         break;
     }
 
-    if ( ok && job.kind != TaskKind::Encrypt && m_completion ) {
+    if ( ok && ( job.kind == TaskKind::Add || job.kind == TaskKind::Remove ) && m_completion ) {
         m_completion( job.store, info );
     }
 

@@ -7,6 +7,9 @@
 #include <vector>
 #include <functional>
 #include <memory>
+#include <cstddef>
+#include <cstdint>
+#include <utility>
 #include <filesystem>
 #include <regex>
 #include <boost/asio.hpp>
@@ -32,11 +35,24 @@ public:
         std::smatch pathMatches;
     };
 
+    using BodyPuller = std::function<bool( std::string &chunk, std::size_t maxSize )>;
+
     struct Response {
         int statusCode = 200;
         std::string reason = "OK";
         std::map<std::string, std::string> headers;
         std::string body;
+        std::uint64_t contentLength = 0;
+        BodyPuller streamBody;
+
+        bool isStreaming() const {
+            return static_cast<bool>( streamBody );
+        }
+
+        void setStream( std::uint64_t length, BodyPuller puller ) {
+            contentLength = length;
+            streamBody = std::move( puller );
+        }
 
         void setJson( const std::string &json ) {
             body = json;

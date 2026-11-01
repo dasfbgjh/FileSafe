@@ -1,12 +1,13 @@
 #include "App.h"
+#include "Logger.hpp"
 #include "Utils.h"
-#include <iostream>
+
+#include <cstdlib>
 
 int main( int argc, char *argv[] ) {
     system( "chcp 65001 >nul" );
 
-    std::cout << "default port: 8080, change port run: "
-              << "FileSafe [port]" << std::endl;
+    LOG_INFO << "default port: 8080, change port run: FileSafe [port]";
 
     utils::setAppDirectory( argc > 0 ? argv[0] : nullptr );
     unsigned short port = 8080;

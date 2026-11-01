@@ -5,8 +5,11 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
+
+class CryptoFile;
 
 namespace cryptostore {
 
@@ -31,6 +34,28 @@ struct Progress {
 };
 
 using ProgressCallback = std::function<void( const Progress & )>;
+
+class FileStream {
+public:
+    FileStream( std::unique_ptr<CryptoFile> file, std::uint64_t remaining );
+
+    ~FileStream();
+
+    FileStream( const FileStream & ) = delete;
+    FileStream &operator=( const FileStream & ) = delete;
+    FileStream( FileStream && ) = delete;
+    FileStream &operator=( FileStream && ) = delete;
+
+    bool read( std::string &chunk, std::size_t maxSize );
+
+    std::uint64_t remaining() const;
+
+    const std::string &lastError() const;
+
+private:
+    std::unique_ptr<CryptoFile> m_file;
+    std::uint64_t m_remaining;
+};
 
 class Store {
 public:
@@ -65,6 +90,13 @@ public:
                    std::string &content,
                    std::string &error ) const;
 
+    std::shared_ptr<FileStream> openStream( const std::string &name,
+                                            const FileEntry &entry,
+                                            const std::string &password,
+                                            std::uint64_t offset,
+                                            std::uint64_t length,
+                                            std::string &error ) const;
+
     bool addPath( const std::string &name,
                   const std::string &password,
                   const std::string &relativeDir,
@@ -79,6 +111,13 @@ public:
                      StoreInfo &info,
                      std::string &error,
                      const ProgressCallback &progress = {} );
+
+    bool exportPath( const std::string &name,
+                     const std::string &password,
+                     const std::string &relativePath,
+                     const std::filesystem::path &destRoot,
+                     std::string &error,
+                     const ProgressCallback &progress = {} ) const;
 
     static bool isValidName( const std::string &name );
 

@@ -12,7 +12,7 @@ namespace {
 constexpr unsigned char MAGIC[4] = { 'C', 'F', 'S', '1' };
 }
 
-CryptoFile::CryptoFile( const std::string &path, const std::string &password, Mode mode )
+CryptoFile::CryptoFile( const std::filesystem::path &path, const std::string &password, Mode mode )
     : m_mode( mode ),
       m_ctx( nullptr ),
       m_open( false ) {
@@ -218,10 +218,10 @@ const std::string &CryptoFile::lastError() const {
     return m_error;
 }
 
-bool CryptoFile::openForWrite( const std::string &path, const std::string &password ) {
+bool CryptoFile::openForWrite( const std::filesystem::path &path, const std::string &password ) {
     m_file.open( path, std::ios::binary | std::ios::out | std::ios::trunc );
     if ( !m_file.is_open() ) {
-        setError( "无法打开文件进行写入: " + path );
+        setError( "无法打开文件进行写入: " + path.u8string() );
         return false;
     }
 
@@ -257,10 +257,10 @@ bool CryptoFile::openForWrite( const std::string &path, const std::string &passw
     return true;
 }
 
-bool CryptoFile::openForRead( const std::string &path, const std::string &password ) {
+bool CryptoFile::openForRead( const std::filesystem::path &path, const std::string &password ) {
     m_file.open( path, std::ios::binary | std::ios::in );
     if ( !m_file.is_open() ) {
-        setError( "无法打开文件进行读取: " + path );
+        setError( "无法打开文件进行读取: " + path.u8string() );
         return false;
     }
 

@@ -15,6 +15,10 @@ void setAppDirectory( const char *argv0 );
 
 const std::filesystem::path &appDirectory();
 
+std::filesystem::path toPath( const std::string &utf8 );
+
+std::string toUtf8( const std::filesystem::path &path );
+
 std::string randomHex( std::size_t bytes );
 
 bool equalsIgnoreCase( const std::string &lhs, const std::string &rhs );
