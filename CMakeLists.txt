@@ -3,6 +3,7 @@ project(FileSafe
     VERSION 1.0.1
     DESCRIPTION "a file crypto tool"
     LANGUAGES CXX
+    HOMEPAGE_URL "https://github.com/dasfbgjh/FileSafe"
 )
 
 set(CMAKE_CXX_STANDARD 17)
