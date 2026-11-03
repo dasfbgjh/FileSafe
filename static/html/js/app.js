@@ -34,6 +34,40 @@ const IMAGE_EXT = ["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg", "ico", "av
 const AUDIO_EXT = ["mp3", "wav", "ogg", "oga", "m4a", "aac", "flac", "opus"];
 const VIDEO_EXT = ["mp4", "webm", "ogv", "m4v", "mov", "mkv", "avi"];
 const PDF_EXT = ["pdf"];
+const HTML_EXT = ["html", "htm"];
+
+const VOLUME_KEY = "filesafe-volume";
+
+function loadMediaVolume() {
+    try {
+        const saved = parseFloat(localStorage.getItem(VOLUME_KEY));
+        if (Number.isFinite(saved) && saved >= 0 && saved <= 1) return saved;
+    } catch (e) { }
+    return 0.5;
+}
+
+let mediaVolume = loadMediaVolume();
+
+function saveMediaVolume(value) {
+    try {
+        localStorage.setItem(VOLUME_KEY, String(value));
+    } catch (e) { }
+}
+
+function setupMedia(media) {
+    media.autoplay = true;
+    media.preload = "auto";
+    media.volume = mediaVolume;
+    media.addEventListener("volumechange", () => {
+        mediaVolume = media.volume;
+        saveMediaVolume(mediaVolume);
+    });
+}
+
+function tryPlayMedia(media) {
+    const promise = media.play();
+    if (promise && typeof promise.catch === "function") promise.catch(() => { });
+}
 
 let token = "";
 let currentDir = "";
@@ -447,7 +481,7 @@ function showViewerMessage(text) {
     viewer.appendChild(empty);
 }
 
-function viewerHeader(file) {
+function viewerHeader(file, extraActions) {
     const head = document.createElement("div");
     head.className = "viewer-head";
 
@@ -463,28 +497,142 @@ function viewerHeader(file) {
     info.appendChild(title);
     info.appendChild(meta);
 
+    const actions = document.createElement("div");
+    actions.className = "viewer-actions";
+    (extraActions || []).forEach(action => actions.appendChild(action));
+
     const download = document.createElement("button");
     download.className = "ghost tiny";
     download.textContent = "下载";
     download.addEventListener("click", () => {
         window.location.href = fileUrl(file.id, true);
     });
+    actions.appendChild(download);
 
     head.appendChild(info);
-    head.appendChild(download);
+    head.appendChild(actions);
     return head;
+}
+
+function createModeButtons() {
+    const text = document.createElement("button");
+    text.className = "ghost tiny";
+    text.textContent = "文本";
+
+    const render = document.createElement("button");
+    render.className = "ghost tiny";
+    render.textContent = "渲染";
+
+    return { text, render };
+}
+
+function createGalleryButton(file, stage, modeButtons) {
+    const button = document.createElement("button");
+    button.className = "ghost tiny";
+    button.textContent = "图库";
+    button.addEventListener("click", () => {
+        stage.innerHTML = "";
+        stage.style.alignItems = "stretch";
+        stage.style.justifyContent = "stretch";
+
+        if (modeButtons) {
+            modeButtons.text.classList.remove("active");
+            modeButtons.render.classList.remove("active");
+        }
+
+        const frame = document.createElement("iframe");
+        frame.className = "html-view";
+        frame.src = "images.html?token=" + encodeURIComponent(token) +
+            "&id=" + encodeURIComponent(file.id);
+        stage.appendChild(frame);
+
+        button.classList.add("active");
+    });
+    return button;
+}
+
+function previewHtml(file, stage, modeButtons, galleryButton) {
+    let mode = "render";
+    let sourceLoaded = false;
+
+    const frame = document.createElement("iframe");
+    frame.className = "html-view";
+    frame.src = fileUrl(file.id, false);
+
+    const textBox = document.createElement("pre");
+    textBox.className = "text-view hidden";
+
+    async function loadSource() {
+        if (sourceLoaded) return;
+        textBox.textContent = "加载中…";
+        try {
+            const response = await fetch(fileUrl(file.id, false));
+            if (!response.ok) {
+                textBox.textContent = "读取失败: HTTP " + response.status;
+                return;
+            }
+            textBox.textContent = await response.text();
+            sourceLoaded = true;
+        } catch (e) {
+            textBox.textContent = "读取失败: " + e.message;
+        }
+    }
+
+    function applyMode() {
+        if (!stage.contains(frame) || !stage.contains(textBox)) {
+            stage.innerHTML = "";
+            stage.appendChild(frame);
+            stage.appendChild(textBox);
+        }
+
+        modeButtons.text.classList.toggle("active", mode === "text");
+        modeButtons.render.classList.toggle("active", mode === "render");
+        frame.classList.toggle("hidden", mode !== "render");
+        textBox.classList.toggle("hidden", mode !== "text");
+        if (galleryButton) galleryButton.classList.remove("active");
+        if (mode === "text") loadSource();
+    }
+
+    stage.style.alignItems = "stretch";
+    stage.style.justifyContent = "stretch";
+    stage.appendChild(frame);
+    stage.appendChild(textBox);
+
+    modeButtons.text.addEventListener("click", () => {
+        mode = "text";
+        applyMode();
+    });
+    modeButtons.render.addEventListener("click", () => {
+        mode = "render";
+        applyMode();
+    });
+
+    applyMode();
 }
 
 async function preview(file) {
     const viewer = $("viewer");
     viewer.innerHTML = "";
-    viewer.appendChild(viewerHeader(file));
+
+    const isHtml = HTML_EXT.includes(extOf(file.path));
+    const modeButtons = isHtml ? createModeButtons() : null;
 
     const stage = document.createElement("div");
     stage.className = "viewer-stage";
+
+    const galleryButton = createGalleryButton(file, stage, modeButtons);
+    const actions = modeButtons ? [modeButtons.text, modeButtons.render] : [];
+    actions.push(galleryButton);
+
+    viewer.appendChild(viewerHeader(file, actions));
     viewer.appendChild(stage);
 
     const kind = kindOf(file.path);
+
+    if (isHtml) {
+        previewHtml(file, stage, modeButtons, galleryButton);
+        return;
+    }
 
     if (kind === "image") {
         const img = document.createElement("img");
@@ -497,20 +645,20 @@ async function preview(file) {
     if (kind === "audio") {
         const audio = document.createElement("audio");
         audio.controls = true;
-        audio.preload = "metadata";
-        audio.volume = 0.5;
         audio.src = fileUrl(file.id, false);
+        setupMedia(audio);
         stage.appendChild(audio);
+        tryPlayMedia(audio);
         return;
     }
 
     if (kind === "video") {
         const video = document.createElement("video");
         video.controls = true;
-        video.preload = "metadata";
-        video.volume = 0.5;
         video.src = fileUrl(file.id, false);
+        setupMedia(video);
         stage.appendChild(video);
+        tryPlayMedia(video);
         return;
     }
 

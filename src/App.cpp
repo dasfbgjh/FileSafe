@@ -414,6 +414,7 @@ void App::handleFile( const Request &req, Response &resp ) {
 
     bool download = req.params.count( "download" ) > 0 && req.params.at( "download" ) == "1";
     std::string contentType = HttpServer::contentType( utils::toPath( entry.path ) );
+    bool isHtml = contentType.compare( 0, 9, "text/html" ) == 0;
 
     resp.setStream( length, [stream]( std::string &chunk, std::size_t maxSize ) {
         return stream->read( chunk, maxSize );
@@ -422,7 +423,7 @@ void App::handleFile( const Request &req, Response &resp ) {
     resp.headers["Content-Disposition"] = utils::contentDisposition( download, entry.path );
     resp.headers["X-Content-Type-Options"] = "nosniff";
     resp.headers["Accept-Ranges"] = "bytes";
-    if ( !download && contentType != "application/pdf" ) {
+    if ( !download && contentType != "application/pdf" && !isHtml ) {
         resp.headers["Content-Security-Policy"] = "sandbox";
     }
 

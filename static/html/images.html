@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>图片瀑布流</title>
+    <style>
+        :root {
+            color-scheme: dark;
+
+            --bg: #0f172a;
+            --panel: #172033;
+            --border: #263248;
+            --text: #e6ecf5;
+            --muted: #8b9bb4;
+            --accent: #3b82f6;
+            --overlay: #000000cc;
+            --shadow: 0 8px 24px #00000066;
+        }
+
+        :root[data-theme="light"] {
+            color-scheme: light;
+
+            --bg: #f4f7fc;
+            --panel: #ffffff;
+            --border: #d9e2ef;
+            --text: #1b2637;
+            --muted: #5f6f88;
+            --accent: #2563eb;
+            --overlay: #0f172ae6;
+            --shadow: 0 8px 24px #0f172a26;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            min-height: 100%;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+            font-size: 14px;
+        }
+
+        .bar {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 16px;
+            background: var(--panel);
+            border-bottom: 1px solid var(--border);
+            box-shadow: var(--shadow);
+        }
+
+        .bar .title {
+            font-size: 14px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .bar .dir {
+            flex: 1;
+            min-width: 0;
+            color: var(--muted);
+            font-size: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .bar .count {
+            flex: none;
+            color: var(--muted);
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .bar button {
+            flex: none;
+            padding: 5px 12px;
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--muted);
+            font-size: 12px;
+            cursor: pointer;
+            transition: color .15s, border-color .15s;
+        }
+
+        .bar button:hover {
+            color: var(--text);
+            border-color: var(--accent);
+        }
+
+        .masonry {
+            padding: 8px 10px 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            grid-auto-rows: 4px;
+            gap: 6px;
+            align-items: start;
+        }
+
+        .item {
+            align-self: start;
+            margin: 0;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+            background: var(--panel);
+            cursor: zoom-in;
+            transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+        }
+
+        .item:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent);
+            box-shadow: var(--shadow);
+        }
+
+        .item img {
+            display: block;
+            width: 100%;
+            height: auto;
+            background: var(--panel);
+        }
+
+        .item img:not(.loaded) {
+            min-height: 150px;
+        }
+
+        .item .name {
+            padding: 6px 10px;
+            color: var(--muted);
+            font-size: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .item.broken img {
+            display: none;
+        }
+
+        .item.broken .name::before {
+            content: "无法加载 · ";
+            color: #f87171;
+        }
+
+        .empty {
+            padding: 40px 20px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.8;
+        }
+
+        .sentinel {
+            height: 1px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .lightbox {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            overflow: hidden;
+            background: var(--overlay);
+            cursor: zoom-out;
+            animation: fade-in .16s ease;
+        }
+
+        @keyframes fade-in {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        .lightbox-stage {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+        }
+
+        .lightbox img {
+            position: absolute;
+            left: 0;
+            top: 0;
+            max-width: none;
+            max-height: none;
+            transform-origin: 0 0;
+            border-radius: 10px;
+            background: #000;
+            box-shadow: 0 24px 70px #00000099;
+            cursor: zoom-in;
+            user-select: none;
+            -webkit-user-drag: none;
+            opacity: 0;
+            transition: opacity .15s ease;
+        }
+
+        .lightbox img.zoomed {
+            opacity: 1;
+        }
+
+        .lightbox .caption {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 14px;
+            z-index: 1;
+            text-align: center;
+            color: #e6ecf5;
+            font-size: 12px;
+            padding: 0 20px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            pointer-events: none;
+        }
+    </style>
+    <script>
+        (function () {
+            var THEME_KEY = "filesafe-theme";
+
+            function systemTheme() {
+                try {
+                    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) {
+                        return "light";
+                    }
+                } catch (e) { }
+                return "dark";
+            }
+
+            function resolveTheme(value) {
+                return (value === "light" || value === "dark") ? value : systemTheme();
+            }
+
+            function applyTheme(theme) {
+                document.documentElement.setAttribute("data-theme", theme);
+            }
+
+            var saved = null;
+            try {
+                saved = localStorage.getItem(THEME_KEY);
+            } catch (e) { }
+            applyTheme(resolveTheme(saved));
+
+            window.addEventListener("storage", function (event) {
+                if (event.key !== THEME_KEY && event.key !== null) return;
+                applyTheme(resolveTheme(event.newValue));
+            });
+        })();
+    </script>
+</head>
+
+<body>
+    <div class="bar">
+        <span class="title">图片</span>
+        <span class="dir" id="dirText">—</span>
+        <span class="count" id="countText"></span>
+        <button id="refreshBtn">刷新</button>
+    </div>
+
+    <main id="grid" class="masonry"></main>
+    <div id="sentinel" class="sentinel hidden"></div>
+    <div id="empty" class="empty hidden"></div>
+
+    <div id="lightbox" class="lightbox hidden">
+        <div id="lightboxStage" class="lightbox-stage">
+            <img id="lightboxImg" alt="">
+        </div>
+        <div class="caption" id="lightboxCaption"></div>
+    </div>
+
+    <script>
+        const IMAGE_EXT = ["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg", "ico", "avif"];
+
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get("token") || "";
+        const selfId = params.get("id") || "";
+
+        const grid = document.getElementById("grid");
+        const sentinel = document.getElementById("sentinel");
+        const emptyBox = document.getElementById("empty");
+        const dirText = document.getElementById("dirText");
+        const countText = document.getElementById("countText");
+        const lightbox = document.getElementById("lightbox");
+        const lightboxStage = document.getElementById("lightboxStage");
+        const lightboxImg = document.getElementById("lightboxImg");
+        const lightboxCaption = document.getElementById("lightboxCaption");
+
+        const BATCH_SIZE = 24;
+        const ZOOM_STEP = 1.15;
+        const ZOOM_MAX_RATIO = 8;
+        const GRID_ROW = 4;
+        const GRID_GAP = 6;
+
+        let pendingFiles = [];
+        let renderedCount = 0;
+        let imageObserver = null;
+        let sentinelObserver = null;
+        let zoomScale = 1;
+        let zoomFit = 1;
+        let zoomX = 0;
+        let zoomY = 0;
+        let resizeTimer = null;
+
+        function extOf(path) {
+            const name = String(path).split("/").pop() || "";
+            const index = name.lastIndexOf(".");
+            return index > 0 ? name.slice(index + 1).toLowerCase() : "";
+        }
+
+        function baseName(path) {
+            const parts = String(path).split("/").filter(Boolean);
+            return parts.length ? parts[parts.length - 1] : path;
+        }
+
+        function dirOf(path) {
+            const normalized = String(path).replace(/\\/g, "/");
+            const index = normalized.lastIndexOf("/");
+            return index > 0 ? normalized.slice(0, index) : "";
+        }
+
+        function fileUrl(id) {
+            return "/api/file?token=" + encodeURIComponent(token) + "&id=" + id;
+        }
+
+        function showEmpty(message) {
+            resetList();
+            countText.textContent = "";
+            emptyBox.textContent = message;
+            emptyBox.classList.remove("hidden");
+        }
+
+        function hideEmpty() {
+            emptyBox.classList.add("hidden");
+        }
+
+        function updateItemSpan(item) {
+            const height = item.getBoundingClientRect().height;
+            if (!height) return;
+            const span = Math.max(1, Math.ceil((height + GRID_GAP) / (GRID_ROW + GRID_GAP)));
+            item.style.gridRowEnd = "span " + span;
+        }
+
+        function updateAllSpans() {
+            Array.prototype.forEach.call(grid.children, updateItemSpan);
+        }
+
+        function openLightbox(file) {
+            lightboxCaption.textContent = file.path + "  ·  滚轮缩放";
+            lightboxImg.alt = baseName(file.path);
+            lightboxImg.classList.remove("zoomed");
+            lightboxImg.style.transform = "";
+            zoomScale = 1;
+            zoomFit = 1;
+            zoomX = 0;
+            zoomY = 0;
+            lightbox.classList.remove("hidden");
+            lightboxImg.src = fileUrl(file.id);
+            if (lightboxImg.complete && lightboxImg.naturalWidth) {
+                resetZoom();
+            }
+        }
+
+        function closeLightbox() {
+            lightbox.classList.add("hidden");
+            lightboxImg.removeAttribute("src");
+            zoomScale = 1;
+            zoomFit = 1;
+            zoomX = 0;
+            zoomY = 0;
+            lightboxImg.style.transform = "";
+            lightboxImg.classList.remove("zoomed");
+        }
+
+        function applyZoom() {
+            lightboxImg.style.transform =
+                "translate(" + zoomX + "px, " + zoomY + "px) scale(" + zoomScale + ")";
+        }
+
+        function clampPan() {
+            const width = lightboxImg.naturalWidth * zoomScale;
+            const height = lightboxImg.naturalHeight * zoomScale;
+            const stageWidth = lightboxStage.clientWidth;
+            const stageHeight = lightboxStage.clientHeight;
+
+            if (width <= stageWidth) {
+                zoomX = (stageWidth - width) / 2;
+            } else {
+                zoomX = Math.min(0, Math.max(stageWidth - width, zoomX));
+            }
+
+            if (height <= stageHeight) {
+                zoomY = (stageHeight - height) / 2;
+            } else {
+                zoomY = Math.min(0, Math.max(stageHeight - height, zoomY));
+            }
+        }
+
+        function resetZoom() {
+            const width = lightboxImg.naturalWidth;
+            const height = lightboxImg.naturalHeight;
+            if (!width || !height) return;
+
+            const stageWidth = lightboxStage.clientWidth;
+            const stageHeight = lightboxStage.clientHeight;
+            zoomFit = Math.min(stageWidth / width, stageHeight / height, 1);
+            zoomScale = zoomFit;
+            zoomX = (stageWidth - width * zoomScale) / 2;
+            zoomY = (stageHeight - height * zoomScale) / 2;
+            lightboxImg.classList.add("zoomed");
+            applyZoom();
+        }
+
+        lightboxImg.addEventListener("load", function () {
+            resetZoom();
+        });
+
+        lightboxStage.addEventListener("wheel", function (event) {
+            if (lightbox.classList.contains("hidden")) return;
+            if (!lightboxImg.naturalWidth) return;
+
+            event.preventDefault();
+
+            const rect = lightboxStage.getBoundingClientRect();
+            const pointerX = event.clientX - rect.left;
+            const pointerY = event.clientY - rect.top;
+
+            const factor = event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
+            const maxScale = Math.max(zoomFit * ZOOM_MAX_RATIO, 1);
+            const next = Math.min(maxScale, Math.max(zoomFit, zoomScale * factor));
+            if (next === zoomScale) return;
+
+            const ratio = next / zoomScale;
+            zoomX = pointerX - (pointerX - zoomX) * ratio;
+            zoomY = pointerY - (pointerY - zoomY) * ratio;
+            zoomScale = next;
+
+            clampPan();
+            applyZoom();
+        }, { passive: false });
+
+        lightbox.addEventListener("click", function (event) {
+            if (event.target === lightboxImg) return;
+            closeLightbox();
+        });
+
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") closeLightbox();
+        });
+
+        window.addEventListener("resize", function () {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(updateAllSpans, 150);
+        });
+
+        function render(images) {
+            hideEmpty();
+            countText.textContent = images.length + " 张";
+            resetList();
+
+            pendingFiles = images;
+            renderedCount = 0;
+
+            if (!("IntersectionObserver" in window)) {
+                images.forEach(function (file) {
+                    grid.appendChild(createItem(file));
+                });
+                updateAllSpans();
+                return;
+            }
+
+            imageObserver = new IntersectionObserver(function (entries, observer) {
+                entries.forEach(function (entry) {
+                    if (!entry.isIntersecting) return;
+                    const img = entry.target;
+                    observer.unobserve(img);
+                    loadImage(img);
+                });
+            }, { rootMargin: "400px 0px" });
+
+            sentinelObserver = new IntersectionObserver(function (entries) {
+                entries.forEach(function (entry) {
+                    if (entry.isIntersecting) renderBatch();
+                });
+            }, { rootMargin: "120px 0px" });
+
+            sentinelObserver.observe(sentinel);
+            renderBatch();
+        }
+
+        function loadImage(img) {
+            if (!img.dataset.src) return;
+            img.src = img.dataset.src;
+            delete img.dataset.src;
+        }
+
+        function createItem(file) {
+            const item = document.createElement("figure");
+            item.className = "item";
+            item.addEventListener("click", function () {
+                openLightbox(file);
+            });
+
+            const img = document.createElement("img");
+            img.alt = baseName(file.path);
+            img.decoding = "async";
+            img.dataset.src = fileUrl(file.id);
+            img.addEventListener("load", function () {
+                img.classList.add("loaded");
+                requestAnimationFrame(function () {
+                    updateItemSpan(item);
+                });
+            });
+            img.addEventListener("error", function () {
+                item.classList.add("broken");
+                requestAnimationFrame(function () {
+                    updateItemSpan(item);
+                });
+            });
+
+            const name = document.createElement("div");
+            name.className = "name";
+            name.textContent = baseName(file.path);
+
+            item.appendChild(img);
+            item.appendChild(name);
+
+            if (imageObserver) {
+                imageObserver.observe(img);
+            } else {
+                loadImage(img);
+            }
+
+            return item;
+        }
+
+        function renderBatch() {
+            if (renderedCount >= pendingFiles.length) {
+                sentinel.classList.add("hidden");
+                return;
+            }
+
+            const next = pendingFiles.slice(renderedCount, renderedCount + BATCH_SIZE);
+            renderedCount += next.length;
+
+            const fragment = document.createDocumentFragment();
+            next.forEach(function (file) {
+                fragment.appendChild(createItem(file));
+            });
+            grid.appendChild(fragment);
+            updateAllSpans();
+
+            if (renderedCount >= pendingFiles.length) {
+                sentinel.classList.add("hidden");
+            } else {
+                sentinel.classList.remove("hidden");
+            }
+        }
+
+        function resetList() {
+            if (imageObserver) {
+                imageObserver.disconnect();
+                imageObserver = null;
+            }
+            if (sentinelObserver) {
+                sentinelObserver.disconnect();
+                sentinelObserver = null;
+            }
+            pendingFiles = [];
+            renderedCount = 0;
+            grid.innerHTML = "";
+            sentinel.classList.add("hidden");
+        }
+
+        async function load() {
+            if (!token) {
+                showEmpty("缺少会话令牌，请从主页面打开该文件");
+                return;
+            }
+
+            dirText.textContent = "加载中…";
+
+            let files = [];
+            try {
+                const response = await fetch("/api/files?token=" + encodeURIComponent(token));
+                if (!response.ok) {
+                    showEmpty("读取文件列表失败: HTTP " + response.status);
+                    dirText.textContent = "—";
+                    return;
+                }
+                const data = await response.json();
+                files = data.files || [];
+            } catch (e) {
+                showEmpty("读取文件列表失败: " + e.message);
+                dirText.textContent = "—";
+                return;
+            }
+
+            const current = selfId
+                ? files.find(function (file) { return String(file.id) === String(selfId); })
+                : null;
+
+            if (!current) {
+                showEmpty("未找到当前文件，无法确定图片目录");
+                dirText.textContent = "—";
+                return;
+            }
+
+            const baseDir = dirOf(current.path);
+
+            dirText.textContent = baseDir || "/";
+
+            const images = files
+                .filter(function (file) {
+                    const path = String(file.path).replace(/\\/g, "/");
+                    return dirOf(path) === baseDir && IMAGE_EXT.includes(extOf(path));
+                })
+                .sort(function (a, b) {
+                    return String(a.path).localeCompare(String(b.path));
+                });
+
+            if (!images.length) {
+                showEmpty("目录 " + (baseDir || "/") + " 中没有图片");
+                return;
+            }
+
+            render(images);
+        }
+
+        document.getElementById("refreshBtn").addEventListener("click", load);
+
+        load();
+    </script>
+</body>
+
+</html>
