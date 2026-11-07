@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>音频库</title>
+    <link rel="stylesheet" href="css/audios.css">
+    <script src="js/theme.js"></script>
+</head>
+
+<body>
+    <div class="shell">
+        <div class="head">
+            <h1>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                    <path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z" />
+                </svg>
+                音频库
+            </h1>
+            <span class="dir" id="dirText">—</span>
+            <div class="search-wrap">
+                <svg class="search-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" class="search" id="audioSearch" placeholder="搜索曲目…">
+            </div>
+            <div class="sort-wrap">
+                <button class="icon-btn" id="sortBtn" title="排序方式">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 6h18M3 12h12M3 18h6"></path>
+                    </svg>
+                </button>
+                <div class="sort-menu" id="sortMenu">
+                    <div class="sort-section">
+                        <div class="sort-label">排序字段</div>
+                        <div class="sort-item" data-sort-by="">默认</div>
+                        <div class="sort-item" data-sort-by="name">名称</div>
+                        <div class="sort-item" data-sort-by="size">大小</div>
+                    </div>
+                    <div class="sort-section">
+                        <div class="sort-label">排序方式</div>
+                        <div class="sort-item" data-sort-order="asc">升序 ↑</div>
+                        <div class="sort-item" data-sort-order="desc">降序 ↓</div>
+                    </div>
+                </div>
+            </div>
+            <button class="icon-btn" id="refreshBtn" title="重新扫描">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <polyline points="1 20 1 14 7 14"></polyline>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+            </button>
+            <span class="count" id="countText">0 首</span>
+        </div>
+
+        <div class="main">
+            <div class="list-head">
+                <span class="col-title">曲目</span>
+                <span class="col-size">大小</span>
+            </div>
+            <div class="list-wrap" id="audioList">
+                <div class="loading">加载中…</div>
+            </div>
+        </div>
+
+        <div class="bar">
+            <div class="cover" id="audioCover" title="打开全屏播放">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" id="coverFallback">
+                    <path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z" />
+                </svg>
+                <img class="cover-img hidden" id="coverImg" alt="">
+            </div>
+            <div class="info" id="audioInfo" title="打开全屏播放">
+                <div class="now-title" id="nowTitle">未播放</div>
+                <div class="now-dir" id="nowDir">—</div>
+            </div>
+            <div class="controls">
+                <button class="ctrl-btn" id="btnPrev" title="上一首">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                        <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"></path>
+                    </svg>
+                </button>
+                <button class="ctrl-btn play" id="btnPlay" title="播放/暂停">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" id="iconPlay">
+                        <path d="M8 5v14l11-7z"></path>
+                    </svg>
+                </button>
+                <button class="ctrl-btn" id="btnNext" title="下一首">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                        <path d="M6 18l8.5-6L6 6v12zM16 6h2v12h-2z"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="progress-col">
+                <div class="bar-lyrics" id="barLyrics">—</div>
+                <div class="progress-wrap">
+                    <span class="time" id="timeCur">0:00</span>
+                    <input type="range" class="progress" id="audioProgress" min="0" max="1000" value="0">
+                    <span class="time" id="timeTotal">0:00</span>
+                </div>
+            </div>
+            <div class="extra">
+                <button class="ctrl-btn small" id="btnMode" title="列表循环">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round" id="iconMode">
+                        <polyline points="17 1 21 5 17 9"></polyline>
+                        <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+                        <polyline points="7 23 3 19 7 15"></polyline>
+                        <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+                    </svg>
+                </button>
+                <svg class="vol-icon" id="volIcon" viewBox="0 0 24 24" width="15" height="15" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    title="静音/取消静音">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                    <path class="vol-wave" d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                    <g class="vol-x" style="display:none">
+                        <line x1="16" y1="9" x2="22" y2="15"></line>
+                        <line x1="22" y1="9" x2="16" y2="15"></line>
+                    </g>
+                </svg>
+                <input type="range" class="volume" id="audioVolume" min="0" max="100" value="80">
+            </div>
+        </div>
+    </div>
+
+    <div class="fullpage hidden" id="fullpage">
+        <div class="fp-bg" id="fpBg"></div>
+        <div class="fp-content">
+            <button class="fp-close" id="fpClose" title="关闭">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+            <div class="fp-left">
+                <div class="disc" id="fpDisc">
+                    <div class="disc-inner">
+                        <svg viewBox="0 0 24 24" width="44" height="44" fill="currentColor" id="discFallback">
+                            <path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z" />
+                        </svg>
+                        <img class="disc-cover hidden" id="discCover" alt="">
+                    </div>
+                </div>
+                <div class="fp-title" id="fpTitle">未播放</div>
+                <div class="fp-dir" id="fpDir">—</div>
+                <canvas class="spectrum" id="fpSpectrum" width="320" height="80"></canvas>
+            </div>
+            <div class="fp-right">
+                <div class="lyrics" id="fpLyrics">
+                    <div class="lyrics-empty">暂无歌词</div>
+                </div>
+            </div>
+        </div>
+        <div class="fp-progress-area">
+            <div class="progress-wrap fp-progress-wrap">
+                <span class="time" id="fpTimeCur">0:00</span>
+                <input type="range" class="progress" id="fpProgress" min="0" max="1000" value="0">
+                <span class="time" id="fpTimeTotal">0:00</span>
+            </div>
+            <div class="fp-controls">
+                <button class="ctrl-btn" id="fpPrev" title="上一首">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                        <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"></path>
+                    </svg>
+                </button>
+                <button class="ctrl-btn play" id="fpPlay" title="播放/暂停">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" id="fpIconPlay">
+                        <path d="M8 5v14l11-7z"></path>
+                    </svg>
+                </button>
+                <button class="ctrl-btn" id="fpNext" title="下一首">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                        <path d="M6 18l8.5-6L6 6v12zM16 6h2v12h-2z"></path>
+                    </svg>
+                </button>
+                <div class="fp-volume-wrap">
+                    <svg class="vol-icon fp-vol-icon" id="fpVolIcon" viewBox="0 0 24 24" width="15" height="15"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" title="静音/取消静音">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                        <path class="vol-wave" d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                        <g class="vol-x" style="display:none">
+                            <line x1="16" y1="9" x2="22" y2="15"></line>
+                            <line x1="22" y1="9" x2="16" y2="15"></line>
+                        </g>
+                    </svg>
+                    <input type="range" class="volume fp-volume" id="fpVolume" min="0" max="100" value="80">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="lib/jsmediatags.js"></script>
+    <script src="js/audios.js"></script>
+</body>
+
+</html>

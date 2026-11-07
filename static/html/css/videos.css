@@ -1,0 +1,267 @@
+:root {
+    color-scheme: dark;
+
+    --bg: #0f172a;
+    --panel: #172033;
+    --border: #263248;
+    --text: #e6ecf5;
+    --muted: #8b9bb4;
+    --accent: #3b82f6;
+    --overlay: #000000cc;
+    --shadow: 0 8px 24px #00000066;
+}
+
+:root[data-theme="light"] {
+    color-scheme: light;
+
+    --bg: #f4f7fc;
+    --panel: #ffffff;
+    --border: #d9e2ef;
+    --text: #1b2637;
+    --muted: #5f6f88;
+    --accent: #2563eb;
+    --overlay: #0f172ae6;
+    --shadow: 0 8px 24px #0f172a26;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    min-height: 100%;
+}
+
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    font-size: 14px;
+}
+
+.refresh {
+    position: fixed;
+    right: 16px;
+    bottom: 44px;
+    z-index: 20;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+    box-shadow: var(--shadow);
+    transition: color .15s, border-color .15s;
+}
+
+.refresh:hover {
+    color: var(--text);
+    border-color: var(--accent);
+}
+
+.refresh svg {
+    width: 16px;
+    height: 16px;
+}
+
+.refresh.spinning svg {
+    animation: spin .7s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.status {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 15;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 28px;
+    padding: 0 12px;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.status .dir {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.status .count {
+    flex: none;
+    white-space: nowrap;
+}
+
+.grid {
+    padding: 10px 10px 40px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+}
+
+.item {
+    position: relative;
+    margin: 0;
+    aspect-ratio: 16 / 9;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: #000;
+    cursor: pointer;
+    transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+
+.item:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+    box-shadow: var(--shadow);
+}
+
+.item video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background: #000;
+    pointer-events: none;
+}
+
+.item .play {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #000000a6;
+    color: #fff;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    transition: transform .18s ease, background .18s ease;
+}
+
+.item:hover .play {
+    background: #000000cc;
+    transform: translate(-50%, -50%) scale(1.08);
+}
+
+.item .play svg {
+    width: 18px;
+    height: 18px;
+}
+
+.item .name {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 18px 10px 6px;
+    color: #e6ecf5;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    background: linear-gradient(to top, #000000cc, #00000000);
+    pointer-events: none;
+}
+
+.item.broken video {
+    display: none;
+}
+
+.item.broken .play {
+    display: none;
+}
+
+.item.broken .name {
+    background: none;
+    padding-top: 6px;
+}
+
+.item.broken .name::before {
+    content: "无法加载 · ";
+    color: #f87171;
+}
+
+.empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.8;
+}
+
+.sentinel {
+    height: 1px;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.player {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--overlay);
+    animation: fade-in .16s ease;
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.player video {
+    max-width: 92vw;
+    max-height: 82vh;
+    border-radius: 10px;
+    background: #000;
+    box-shadow: 0 24px 70px #00000099;
+    outline: none;
+}
+
+.player .caption {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 14px;
+    text-align: center;
+    color: #e6ecf5;
+    font-size: 12px;
+    padding: 0 20px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+}

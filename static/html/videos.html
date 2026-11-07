@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>视频库</title>
+    <link rel="stylesheet" href="css/videos.css">
+    <script src="js/theme.js"></script>
+</head>
+
+<body>
+    <main id="grid" class="grid"></main>
+    <div id="sentinel" class="sentinel hidden"></div>
+    <div id="empty" class="empty hidden"></div>
+
+    <div id="player" class="player hidden">
+        <video id="playerVideo" controls playsinline preload="auto"></video>
+        <div class="caption" id="playerCaption"></div>
+    </div>
+
+    <button id="refreshBtn" class="refresh" title="刷新">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M13 8a5 5 0 1 1-1.46-3.54" />
+            <path d="M13 2.6v3h-3" />
+        </svg>
+    </button>
+
+    <div class="status">
+        <span id="dirText" class="dir">—</span>
+        <span id="countText" class="count"></span>
+    </div>
+
+    <script src="js/videos.js"></script>
+</body>
+
+</html>
