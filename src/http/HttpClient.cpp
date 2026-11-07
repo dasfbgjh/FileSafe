@@ -7,6 +7,16 @@
 
 namespace http {
 
+namespace {
+
+template <typename Stream>
+void applyTimeout( Stream &stream, std::chrono::milliseconds timeout ) {
+    if ( timeout.count() > 0 )
+        stream.expires_after( timeout );
+}
+
+} // namespace
+
 class HttpClient::Session : public std::enable_shared_from_this<Session> {
 public:
     Session( asio::io_context &ioc,
@@ -15,16 +25,13 @@ public:
 #endif
              const std::string &userAgent,
              ResponseCallback onSuccess, ErrorCallback onError )
-        : m_resolver( asio::make_strand( ioc ) )
-        , m_stream( ioc )
+        : m_resolver( asio::make_strand( ioc ) ), m_stream( ioc )
 #ifdef HTTP_ENABLE_SSL
-        , m_sslCtx( asio::ssl::context::tlsv12_client )
-        , m_sslStream( asio::make_strand( ioc ), m_sslCtx )
-        , m_verifySsl( verifySsl )
+          ,
+          m_sslCtx( asio::ssl::context::tlsv12_client ), m_sslStream( asio::make_strand( ioc ), m_sslCtx ), m_verifySsl( verifySsl )
 #endif
-        , m_onSuccess( std::move( onSuccess ) )
-        , m_onError( std::move( onError ) )
-        , m_userAgent( userAgent ) {
+          ,
+          m_onSuccess( std::move( onSuccess ) ), m_onError( std::move( onError ) ), m_userAgent( userAgent ) {
 #ifdef HTTP_ENABLE_SSL
         if ( !m_verifySsl ) {
             m_sslStream.set_verify_mode( asio::ssl::verify_none );
@@ -94,6 +101,7 @@ private:
                 return;
             }
 
+            applyTimeout( beast::get_lowest_layer( m_sslStream ), m_options.timeout );
             beast::get_lowest_layer( m_sslStream ).async_connect(
                 results,
                 beast::bind_front_handler( &Session::onConnect, shared_from_this() ) );
@@ -102,6 +110,7 @@ private:
                 m_onError( asio::error::operation_not_supported );
 #endif
         } else {
+            applyTimeout( m_stream, m_options.timeout );
             m_stream.async_connect(
                 results,
                 beast::bind_front_handler( &Session::onConnect, shared_from_this() ) );
@@ -117,6 +126,7 @@ private:
 
         if ( m_useSsl ) {
 #ifdef HTTP_ENABLE_SSL
+            applyTimeout( beast::get_lowest_layer( m_sslStream ), m_options.timeout );
             m_sslStream.async_handshake(
                 asio::ssl::stream_base::client,
                 beast::bind_front_handler( &Session::onHandshake, shared_from_this() ) );
@@ -143,11 +153,13 @@ private:
     void doWrite() {
         if ( m_useSsl ) {
 #ifdef HTTP_ENABLE_SSL
+            applyTimeout( beast::get_lowest_layer( m_sslStream ), m_options.timeout );
             beast::http::async_write(
                 m_sslStream, m_req,
                 beast::bind_front_handler( &Session::onWrite, shared_from_this() ) );
 #endif
         } else {
+            applyTimeout( m_stream, m_options.timeout );
             beast::http::async_write(
                 m_stream, m_req,
                 beast::bind_front_handler( &Session::onWrite, shared_from_this() ) );
@@ -163,11 +175,13 @@ private:
 
         if ( m_useSsl ) {
 #ifdef HTTP_ENABLE_SSL
+            applyTimeout( beast::get_lowest_layer( m_sslStream ), m_options.timeout );
             beast::http::async_read(
                 m_sslStream, m_buffer, m_res,
                 beast::bind_front_handler( &Session::onRead, shared_from_this() ) );
 #endif
         } else {
+            applyTimeout( m_stream, m_options.timeout );
             beast::http::async_read(
                 m_stream, m_buffer, m_res,
                 beast::bind_front_handler( &Session::onRead, shared_from_this() ) );
@@ -231,8 +245,7 @@ private:
 };
 
 HttpClient::HttpClient()
-    : m_ownedIoc( std::make_unique<asio::io_context>() )
-    , m_ioc( *m_ownedIoc ) {
+    : m_ownedIoc( std::make_unique<asio::io_context>() ), m_ioc( *m_ownedIoc ) {
 }
 
 HttpClient::HttpClient( asio::io_context &ioc )
@@ -284,7 +297,8 @@ void HttpClient::request( beast::http::verb method, const std::string &url, Resp
 }
 
 void HttpClient::request( beast::http::verb method, const std::string &url, ResponseCallback onSuccess, ErrorCallback onError, RequestOptions options ) {
-    auto session = std::make_shared<Session>( m_ioc,
+    auto session = std::make_shared<Session>(
+        m_ioc,
 #ifdef HTTP_ENABLE_SSL
         m_verifySsl,
 #endif
@@ -336,116 +350,32 @@ HttpClient::Response HttpClient::requestSync( beast::http::verb method, const st
 
 HttpClient::Response HttpClient::requestSync( beast::http::verb method, const std::string &url, RequestOptions options ) {
     Response resp;
-    ParsedUrl parsed = parseUrl( url );
-    if ( parsed.host.empty() ) {
-        return resp;
-    }
-
-#ifndef HTTP_ENABLE_SSL
-    if ( parsed.ssl ) {
-        resp.statusCode = 501;
-        resp.reason = "SSL Not Enabled";
-        return resp;
-    }
-#endif
 
     try {
         asio::io_context ioc;
-        tcp::resolver resolver( ioc );
 
-        auto results = resolver.resolve( parsed.host, parsed.port );
-
-        if ( parsed.ssl ) {
+        auto session = std::make_shared<Session>(
+            ioc,
 #ifdef HTTP_ENABLE_SSL
-            asio::ssl::context ctx( asio::ssl::context::tlsv12_client );
-            if ( !m_verifySsl ) {
-                ctx.set_verify_mode( asio::ssl::verify_none );
-            }
-
-            beast::ssl_stream<beast::tcp_stream> stream( ioc, ctx );
-            if ( !SSL_set_tlsext_host_name( stream.native_handle(), parsed.host.c_str() ) ) {
-                return resp;
-            }
-
-            beast::get_lowest_layer( stream ).connect( results );
-            stream.handshake( asio::ssl::stream_base::client );
-
-            beast::http::request<beast::http::string_body> req;
-            req.method( method );
-            req.target( parsed.target );
-            req.version( 11 );
-            req.set( beast::http::field::host, parsed.host );
-            req.set( beast::http::field::user_agent, m_userAgent );
-            req.set( beast::http::field::connection, "close" );
-
-            if ( !options.body.empty() ) {
-                req.body() = options.body;
-                if ( req.find( beast::http::field::content_type ) == req.end() ) {
-                    req.set( beast::http::field::content_type, "application/octet-stream" );
-                }
-            }
-
-            for ( auto &[key, value] : options.headers ) {
-                req.set( key, value );
-            }
-            req.prepare_payload();
-
-            beast::http::write( stream, req );
-
-            beast::flat_buffer buffer;
-            beast::http::response<beast::http::string_body> res;
-            beast::http::read( stream, buffer, res );
-
-            resp.statusCode = res.result_int();
-            resp.reason = std::string( res.reason() );
-            resp.body = res.body();
-            for ( auto it = res.begin(); it != res.end(); ++it ) {
-                resp.headers.emplace( std::string( it->name_string() ), std::string( it->value() ) );
-            }
-
-            error_code ec;
-            stream.shutdown( ec );
+            m_verifySsl,
 #endif
-        } else {
-            beast::tcp_stream stream( ioc );
-            stream.connect( results );
-
-            beast::http::request<beast::http::string_body> req;
-            req.method( method );
-            req.target( parsed.target );
-            req.version( 11 );
-            req.set( beast::http::field::host, parsed.host );
-            req.set( beast::http::field::user_agent, m_userAgent );
-            req.set( beast::http::field::connection, "close" );
-
-            if ( !options.body.empty() ) {
-                req.body() = options.body;
-                if ( req.find( beast::http::field::content_type ) == req.end() ) {
-                    req.set( beast::http::field::content_type, "application/octet-stream" );
+            m_userAgent,
+            [&resp, &ioc]( Response &&result ) {
+                resp = std::move( result );
+                ioc.stop();
+            },
+            [&resp, &ioc]( const error_code &ec ) {
+                if ( ec == beast::error::timeout ) {
+                    resp.reason = "Request Timeout";
+                } else if ( ec == asio::error::operation_not_supported ) {
+                    resp.statusCode = 501;
+                    resp.reason = "SSL Not Enabled";
                 }
-            }
+                ioc.stop();
+            } );
 
-            for ( auto &[key, value] : options.headers ) {
-                req.set( key, value );
-            }
-            req.prepare_payload();
-
-            beast::http::write( stream, req );
-
-            beast::flat_buffer buffer;
-            beast::http::response<beast::http::string_body> res;
-            beast::http::read( stream, buffer, res );
-
-            resp.statusCode = res.result_int();
-            resp.reason = std::string( res.reason() );
-            resp.body = res.body();
-            for ( auto it = res.begin(); it != res.end(); ++it ) {
-                resp.headers.emplace( std::string( it->name_string() ), std::string( it->value() ) );
-            }
-
-            error_code ec;
-            stream.socket().shutdown( tcp::socket::shutdown_both, ec );
-        }
+        session->run( method, url, std::move( options ) );
+        ioc.run();
     } catch ( const std::exception & ) {
     }
 

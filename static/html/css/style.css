@@ -606,7 +606,8 @@ label.inline {
     overflow: auto;
 }
 
-.viewer-stage iframe.html-view {
+.viewer-stage iframe.html-view,
+.viewer-stage iframe.pdf-view {
     width: 100%;
     height: 100%;
     border: 1px solid var(--border);

@@ -663,22 +663,10 @@ async function preview(file) {
     }
 
     if (kind === "pdf") {
-        const panel = document.createElement("div");
-        panel.className = "empty stack";
-
-        const note = document.createElement("div");
-        note.textContent = "PDF 文件将由浏览器自带的阅读器显示";
-
-        const open = document.createElement("button");
-        open.className = "ghost";
-        open.textContent = "在浏览器中打开 PDF";
-        open.addEventListener("click", () => {
-            window.open(fileUrl(file.id, false), "_blank");
-        });
-
-        panel.appendChild(note);
-        panel.appendChild(open);
-        stage.appendChild(panel);
+        const frame = document.createElement("iframe");
+        frame.className = "pdf-view";
+        frame.src = fileUrl(file.id, false);
+        stage.appendChild(frame);
         return;
     }
 

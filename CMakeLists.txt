@@ -17,6 +17,7 @@ find_package(Boost REQUIRED CONFIG COMPONENTS
     filesystem
     regex
     json
+    beast
 )
 
 set(OPENSSL_USE_STATIC_LIBS ON)
@@ -43,6 +44,7 @@ add_executable(FileSafe ${WIN_GUI}
     src/CryptoFile.cpp
     src/CryptoStore.cpp
     src/http/HttpServer.cpp
+    # src/http/HttpClient.cpp
 )
 target_include_directories(FileSafe PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -50,6 +52,7 @@ target_include_directories(FileSafe PRIVATE
 target_compile_definitions(FileSafe PRIVATE
     -DCMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     -DWIN32_LEAN_AND_MEAN
+    -DHTTP_ENABLE_SSL
 )
 target_link_libraries(FileSafe PRIVATE
     ${RESOURCE_NAME_PREIFX}_resource
@@ -59,6 +62,7 @@ target_link_libraries(FileSafe PRIVATE
     Boost::filesystem
     Boost::regex
     Boost::json
+    Boost::beast
 
     OpenSSL::SSL
     OpenSSL::Crypto
@@ -67,6 +71,10 @@ target_link_libraries(FileSafe PRIVATE
 if(WIN32)
     target_link_libraries(FileSafe PRIVATE ws2_32 mswsock)
 endif()
+
+target_compile_options(FileSafe PRIVATE
+    $<$<CONFIG:Debug>:-Og>
+)
 
 target_link_options(FileSafe PRIVATE
     -static-libstdc++ -static-libgcc -static
