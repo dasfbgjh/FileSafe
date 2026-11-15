@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 project(FileSafe
-    VERSION 1.0.1
+    VERSION 1.0.2
     DESCRIPTION "a file crypto tool"
     LANGUAGES CXX
     HOMEPAGE_URL "https://github.com/dasfbgjh/FileSafe"
