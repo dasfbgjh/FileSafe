@@ -1,4 +1,5 @@
 #include "CryptoFile.h"
+#include "Logger.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -254,6 +255,7 @@ bool CryptoFile::openForWrite( const std::filesystem::path &path, const std::str
     }
 
     m_open = true;
+    LOG_DEBUG << "已打开加密写入文件: " + path.u8string();
     return true;
 }
 
@@ -293,6 +295,7 @@ bool CryptoFile::openForRead( const std::filesystem::path &path, const std::stri
     }
 
     m_open = true;
+    LOG_DEBUG << "已打开解密读取文件: " + path.u8string();
     return true;
 }
 

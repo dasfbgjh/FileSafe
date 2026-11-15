@@ -1,5 +1,6 @@
 #include "CryptoStore.h"
 #include "CryptoFile.h"
+#include "Logger.hpp"
 #include "Utils.h"
 
 #include <algorithm>
@@ -133,6 +134,7 @@ std::vector<std::string> Store::listStores() const {
     }
 
     std::sort( names.begin(), names.end() );
+    LOG_DEBUG << "扫描加密目录完成, 共 " + std::to_string( names.size() ) + " 个";
     return names;
 }
 
@@ -154,6 +156,8 @@ bool Store::encryptDirectory( const fs::path &sourceDir,
                               StoreInfo &info,
                               std::string &error,
                               const ProgressCallback &progress ) {
+    LOG_INFO << "开始加密目录: " + sourceDir.u8string();
+
     if ( password.empty() ) {
         error = "密码不能为空";
         return false;
@@ -310,6 +314,8 @@ bool Store::encryptDirectory( const fs::path &sourceDir,
         return false;
     }
 
+    LOG_INFO << "加密目录完成: " + name + ", 文件数: " + std::to_string( info.files.size() ) +
+                    ", 总字节: " + std::to_string( totalBytes );
     return true;
 }
 
@@ -352,6 +358,7 @@ bool Store::openStore( const std::string &name,
 
     parsed.name = name;
     info = std::move( parsed );
+    LOG_DEBUG << "打开加密目录成功: " + name + ", 文件数: " + std::to_string( info.files.size() );
     return true;
 }
 
@@ -479,6 +486,9 @@ bool Store::addPath( const std::string &name,
                      StoreInfo &info,
                      std::string &error,
                      const ProgressCallback &progress ) {
+    LOG_INFO << "开始添加文件到加密目录: " + name + ", 源路径: " + sourcePath.u8string() +
+                    ", 目标目录: " + ( relativeDir.empty() ? "根目录" : relativeDir );
+
     if ( !isValidName( name ) ) {
         error = "目录名不合法";
         return false;
@@ -667,6 +677,8 @@ bool Store::addPath( const std::string &name,
     }
 
     info = std::move( updated );
+    LOG_INFO << "添加文件完成: " + name + ", 新增 " + std::to_string( written.size() ) +
+                    " 个文件, 当前共 " + std::to_string( info.files.size() ) + " 个";
     return true;
 }
 
@@ -676,6 +688,8 @@ bool Store::removePath( const std::string &name,
                         StoreInfo &info,
                         std::string &error,
                         const ProgressCallback &progress ) {
+    LOG_INFO << "开始删除: " + name + ", 路径: " + ( relativePath.empty() ? "根目录" : relativePath );
+
     if ( !isValidName( name ) ) {
         error = "目录名不合法";
         return false;
@@ -744,6 +758,8 @@ bool Store::removePath( const std::string &name,
     }
 
     info = std::move( updated );
+    LOG_INFO << "删除文件完成: " + name + ", 删除 " + std::to_string( removed.size() ) +
+                    " 个文件, 剩余 " + std::to_string( info.files.size() ) + " 个";
     return true;
 }
 
@@ -753,6 +769,9 @@ bool Store::exportPath( const std::string &name,
                         const fs::path &destRoot,
                         std::string &error,
                         const ProgressCallback &progress ) const {
+    LOG_INFO << "开始导出: " + name + ", 路径: " + ( relativePath.empty() ? "根目录" : relativePath ) +
+                    ", 目标: " + destRoot.u8string();
+
     if ( !isValidName( name ) ) {
         error = "目录名不合法";
         return false;
@@ -888,6 +907,8 @@ bool Store::exportPath( const std::string &name,
         return false;
     }
 
+    LOG_INFO << "导出文件完成: " + name + ", 导出 " + std::to_string( selected.size() ) +
+                    " 个文件到 " + destRoot.u8string();
     return true;
 }
 

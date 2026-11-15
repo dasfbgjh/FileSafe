@@ -1,4 +1,5 @@
 #include "EncryptQueue.h"
+#include "Logger.hpp"
 #include "Utils.h"
 
 #include <algorithm>
@@ -16,6 +17,19 @@ const char *kindName( TaskKind kind ) {
         return "export";
     default:
         return "encrypt";
+    }
+}
+
+const char *kindLabel( TaskKind kind ) {
+    switch ( kind ) {
+    case TaskKind::Add:
+        return "添加";
+    case TaskKind::Remove:
+        return "删除";
+    case TaskKind::Export:
+        return "导出";
+    default:
+        return "加密";
     }
 }
 
@@ -40,6 +54,7 @@ void EncryptQueue::start() {
     }
     m_running = true;
     m_thread = std::thread( [this] { workerLoop(); } );
+    LOG_INFO << "任务队列已启动";
 }
 
 void EncryptQueue::stop() {
@@ -54,6 +69,7 @@ void EncryptQueue::stop() {
     if ( m_thread.joinable() ) {
         m_thread.join();
     }
+    LOG_INFO << "任务队列已停止";
 }
 
 std::string EncryptQueue::submitEncrypt( const std::string &dir, const std::string &password ) {
@@ -108,10 +124,13 @@ std::string EncryptQueue::submitExport( const std::string &store,
 std::string EncryptQueue::submitJob( Job job, const std::string &title ) {
     std::string id = utils::randomHex( 8 );
     if ( id.empty() ) {
+        LOG_ERROR << "创建任务失败: 生成任务编号失败";
         return {};
     }
 
     job.id = id;
+
+    LOG_INFO << "任务已入队: " + id + " [" + kindLabel( job.kind ) + "] " + title;
 
     {
         std::lock_guard<std::mutex> lock( m_mutex );
@@ -164,6 +183,7 @@ void EncryptQueue::workerLoop() {
             it->second.startedAt = std::chrono::steady_clock::now();
         }
 
+        LOG_DEBUG << "开始执行任务: " + job.id + " [" + kindLabel( job.kind ) + "]";
         runJob( job );
     }
 }
@@ -210,6 +230,7 @@ void EncryptQueue::runJob( const Job &job ) {
     if ( ok ) {
         removeLocked( job.id );
         ++m_finished;
+        LOG_INFO << "任务完成: " + job.id + " [" + kindLabel( job.kind ) + "]";
         return;
     }
 
@@ -221,6 +242,7 @@ void EncryptQueue::runJob( const Job &job ) {
     it->second.error = error.empty() ? std::string( "任务执行失败" ) : error;
     it->second.current.clear();
     it->second.finishedAt = std::chrono::steady_clock::now();
+    LOG_ERROR << "任务失败: " + job.id + " [" + kindLabel( job.kind ) + "], 原因: " + it->second.error;
     pruneLocked();
 }
 

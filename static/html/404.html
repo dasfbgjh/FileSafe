@@ -1,24 +1,535 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>404 Not Found</title>
-<link rel="stylesheet" href="/css/style.css">
-</head>
-<body>
-<div class="app">
-    <header>
-        <h1>404 Not Found</h1>
-        <p>请求的页面不存在。</p>
-    </header>
 
-    <div class="card" style="margin-top:24px;">
-        <p class="hint" style="margin-top:0;">
-            页面可能已被移除，或者地址拼写有误。
-        </p>
-        <a href="/"><button>返回首页</button></a>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark light">
+    <title>404 Not Found</title>
+    <script>
+        (function () {
+            var theme = "dark";
+            try {
+                var saved = localStorage.getItem("filesafe-theme");
+                if (saved === "light" || saved === "dark") {
+                    theme = saved;
+                } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) {
+                    theme = "light";
+                }
+            } catch (e) { }
+            document.documentElement.setAttribute("data-theme", theme);
+        })();
+    </script>
+    <style>
+        :root {
+            color-scheme: dark;
+
+            --bg: #0f172a;
+            --panel: #172033cc;
+            --border: #263248;
+            --text: #e6ecf5;
+            --muted: #8b9bb4;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --accent-2: #22d3ee;
+            --glow: #1e3a8a55;
+            --btn-text: #fff;
+            --shadow: 0 20px 60px #00000080;
+        }
+
+        :root[data-theme="light"] {
+            color-scheme: light;
+
+            --bg: #f4f7fc;
+            --panel: #ffffffe6;
+            --border: #d9e2ef;
+            --text: #1b2637;
+            --muted: #5f6f88;
+            --accent: #2563eb;
+            --accent-hover: #1d4ed8;
+            --accent-2: #0891b2;
+            --glow: #93c5fd55;
+            --btn-text: #fff;
+            --shadow: 0 20px 60px #0f172a26;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        body {
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            background: radial-gradient(1200px 600px at 20% -10%, var(--glow), transparent), var(--bg);
+            color: var(--text);
+            font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+            font-size: 14px;
+        }
+
+        .orbs {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .orbs i {
+            position: absolute;
+            border-radius: 50%;
+            opacity: .5;
+            filter: blur(70px);
+            animation: drift 18s ease-in-out infinite alternate;
+        }
+
+        .orbs i:nth-child(1) {
+            top: -12%;
+            left: -8%;
+            width: 46vmax;
+            height: 46vmax;
+            background: var(--accent);
+        }
+
+        .orbs i:nth-child(2) {
+            right: -14%;
+            bottom: -18%;
+            width: 52vmax;
+            height: 52vmax;
+            background: var(--accent-2);
+            opacity: .35;
+            animation-duration: 24s;
+            animation-delay: -6s;
+        }
+
+        .orbs i:nth-child(3) {
+            top: 32%;
+            left: 42%;
+            width: 30vmax;
+            height: 30vmax;
+            background: var(--accent);
+            opacity: .28;
+            animation-duration: 21s;
+            animation-delay: -12s;
+        }
+
+        .sparks {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .spark {
+            position: absolute;
+            bottom: -12px;
+            left: var(--x, 50%);
+            width: var(--s, 4px);
+            height: var(--s, 4px);
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 0 10px var(--accent);
+            opacity: 0;
+            animation: float-up var(--t, 9s) linear var(--d, 0s) infinite;
+        }
+
+        .page {
+            position: relative;
+            z-index: 1;
+            width: min(560px, 100%);
+            text-align: center;
+            animation: enter .9s cubic-bezier(.22, 1, .36, 1) both;
+        }
+
+        .lock {
+            position: relative;
+            width: 92px;
+            height: 92px;
+            margin: 0 auto 6px;
+            animation: enter .9s cubic-bezier(.22, 1, .36, 1) both, sway 7s ease-in-out 1s infinite;
+        }
+
+        .lock::after {
+            content: "";
+            position: absolute;
+            inset: -18px;
+            border-radius: 50%;
+            background: radial-gradient(circle, var(--accent) 0%, transparent 68%);
+            opacity: .28;
+            animation: pulse 3.2s ease-in-out infinite;
+        }
+
+        .lock svg {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            height: 100%;
+            overflow: visible;
+        }
+
+        .lock .shackle,
+        .lock .body {
+            fill: none;
+            stroke: var(--accent);
+            stroke-width: 5;
+            stroke-linecap: round;
+            filter: drop-shadow(0 0 8px var(--accent));
+        }
+
+        .lock .body {
+            fill: color-mix(in srgb, var(--accent) 14%, transparent);
+        }
+
+        .lock .shackle-left {
+            animation: shift-left 3.4s ease-in-out infinite;
+        }
+
+        .lock .shackle-right {
+            animation: shift-right 3.4s ease-in-out infinite;
+        }
+
+        .lock .hole,
+        .lock .stem {
+            fill: var(--accent);
+            filter: drop-shadow(0 0 6px var(--accent));
+            animation: blink 2.4s ease-in-out infinite;
+        }
+
+        .code {
+            display: flex;
+            justify-content: center;
+            gap: .04em;
+            margin: 10px 0 4px;
+            font-size: clamp(62px, 15vw, 132px);
+            font-weight: 800;
+            line-height: 1;
+            letter-spacing: .04em;
+        }
+
+        .code span {
+            background: linear-gradient(165deg, var(--text) 10%, var(--accent) 62%, var(--accent-2));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            filter: drop-shadow(0 6px 24px var(--glow));
+            animation: levitate 4.6s ease-in-out infinite;
+        }
+
+        .code span:nth-child(1) {
+            animation-delay: 0s;
+        }
+
+        .code span:nth-child(2) {
+            animation-delay: .18s;
+        }
+
+        .code span:nth-child(3) {
+            animation-delay: .36s;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 12px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: var(--panel);
+            color: var(--muted);
+            font-size: 12px;
+            letter-spacing: .12em;
+            animation: enter .9s cubic-bezier(.22, 1, .36, 1) .12s both;
+        }
+
+        .badge i {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 0 8px var(--accent);
+            animation: blink 1.6s ease-in-out infinite;
+        }
+
+        h1 {
+            margin: 14px 0 0;
+            font-size: clamp(18px, 2.6vw, 22px);
+            font-weight: 600;
+            letter-spacing: .04em;
+            animation: enter .9s cubic-bezier(.22, 1, .36, 1) .2s both;
+        }
+
+        p {
+            margin: 10px auto 0;
+            max-width: 420px;
+            color: var(--muted);
+            line-height: 1.7;
+            animation: enter .9s cubic-bezier(.22, 1, .36, 1) .3s both;
+        }
+
+        .actions {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 26px;
+            animation: enter .9s cubic-bezier(.22, 1, .36, 1) .4s both;
+        }
+
+        .btn {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            padding: 9px 22px;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            font-size: 13px;
+            font-family: inherit;
+            text-decoration: none;
+            cursor: pointer;
+            transition: background .18s, border-color .18s, transform .18s, box-shadow .18s;
+        }
+
+        .btn::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: -130%;
+            width: 55%;
+            height: 100%;
+            background: linear-gradient(100deg, transparent, #ffffff70, transparent);
+            transform: skewX(-20deg);
+            pointer-events: none;
+        }
+
+        .btn:hover::after {
+            animation: shine .9s ease;
+        }
+
+        .btn:active {
+            transform: scale(.97);
+        }
+
+        .btn:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+
+        .btn.primary {
+            background: var(--accent);
+            color: var(--btn-text);
+            box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 40%, transparent);
+        }
+
+        .btn.primary:hover {
+            background: var(--accent-hover);
+            box-shadow: 0 10px 30px color-mix(in srgb, var(--accent) 52%, transparent);
+        }
+
+        .btn.ghost {
+            background: var(--panel);
+            border-color: var(--border);
+            color: var(--text);
+        }
+
+        .btn.ghost:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .foot {
+            margin-top: 30px;
+            color: var(--muted);
+            font-size: 12px;
+            letter-spacing: .14em;
+            opacity: .8;
+            animation: enter .9s cubic-bezier(.22, 1, .36, 1) .5s both;
+        }
+
+        @keyframes enter {
+            from {
+                opacity: 0;
+                transform: translateY(18px) scale(.97);
+            }
+
+            to {
+                opacity: 1;
+                transform: none;
+            }
+        }
+
+        @keyframes drift {
+            from {
+                transform: translate3d(0, 0, 0) scale(1);
+            }
+
+            to {
+                transform: translate3d(6%, -8%, 0) scale(1.12);
+            }
+        }
+
+        @keyframes float-up {
+            0% {
+                opacity: 0;
+                transform: translateY(0) scale(.5);
+            }
+
+            12% {
+                opacity: .85;
+            }
+
+            75% {
+                opacity: .5;
+            }
+
+            100% {
+                opacity: 0;
+                transform: translateY(-80vh) scale(1);
+            }
+        }
+
+        @keyframes levitate {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-9px);
+            }
+        }
+
+        @keyframes sway {
+
+            0%,
+            100% {
+                transform: rotate(0deg);
+            }
+
+            30% {
+                transform: rotate(-3.5deg);
+            }
+
+            70% {
+                transform: rotate(3.5deg);
+            }
+        }
+
+        @keyframes shift-left {
+
+            0%,
+            100% {
+                transform: translate(0, 0);
+            }
+
+            50% {
+                transform: translate(-3px, -4px);
+            }
+        }
+
+        @keyframes shift-right {
+
+            0%,
+            100% {
+                transform: translate(0, 0);
+            }
+
+            50% {
+                transform: translate(3px, -4px);
+            }
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                transform: scale(.85);
+                opacity: .18;
+            }
+
+            50% {
+                transform: scale(1.12);
+                opacity: .36;
+            }
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: .45;
+            }
+        }
+
+        @keyframes shine {
+            to {
+                left: 140%;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+
+            *,
+            *::before,
+            *::after {
+                animation: none !important;
+                transition: none !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="orbs" aria-hidden="true"><i></i><i></i><i></i></div>
+    <div class="sparks" aria-hidden="true">
+        <span class="spark" style="--x: 8%; --s: 3px; --t: 11s; --d: 0s"></span>
+        <span class="spark" style="--x: 19%; --s: 5px; --t: 8.5s; --d: 1.4s"></span>
+        <span class="spark" style="--x: 31%; --s: 4px; --t: 10s; --d: 3.2s"></span>
+        <span class="spark" style="--x: 44%; --s: 3px; --t: 12s; --d: 2.1s"></span>
+        <span class="spark" style="--x: 56%; --s: 6px; --t: 9s; --d: 4.6s"></span>
+        <span class="spark" style="--x: 68%; --s: 4px; --t: 10.5s; --d: .8s"></span>
+        <span class="spark" style="--x: 77%; --s: 3px; --t: 13s; --d: 5.4s"></span>
+        <span class="spark" style="--x: 88%; --s: 5px; --t: 9.5s; --d: 3.8s"></span>
+        <span class="spark" style="--x: 95%; --s: 3px; --t: 11.5s; --d: 6.2s"></span>
     </div>
-</div>
+
+    <main class="page">
+        <div class="lock" aria-hidden="true">
+            <svg viewBox="0 0 64 64">
+                <path class="shackle shackle-left" d="M20 34V24a12 12 0 0 1 9-11.6" />
+                <path class="shackle shackle-right" d="M44 34V24a12 12 0 0 1-9-11.6" />
+                <rect class="body" x="12" y="31" width="40" height="27" rx="8" />
+                <circle class="hole" cx="32" cy="42" r="4.2" />
+                <rect class="stem" x="30.4" y="44" width="3.2" height="8" rx="1.6" />
+            </svg>
+        </div>
+
+        <div class="code" aria-hidden="true"><span>4</span><span>0</span><span>4</span></div>
+
+        <div class="badge"><i></i>ERROR 404</div>
+
+        <h1>页面走丢了</h1>
+        <p>请求的资源可能已被移除、重命名，或者地址拼写有误。</p>
+
+        <div class="actions">
+            <a class="btn primary" href="/">返回首页</a>
+            <button class="btn ghost" type="button" onclick="location.reload()">重新加载</button>
+        </div>
+
+        <div class="foot">FILESAFE · AES-256-CTR</div>
+    </main>
 </body>
+
 </html>

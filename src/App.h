@@ -11,7 +11,7 @@
 
 class App {
 public:
-    explicit App( const std::filesystem::path &baseDir );
+    App( const std::filesystem::path &dataDir, const std::filesystem::path &outputDir );
 
     ~App();
 
@@ -46,7 +46,8 @@ private:
 
     static constexpr const char *RESOURCE_PREFIX = "/html";
 
-    std::filesystem::path m_baseDir;
+    std::filesystem::path m_dataDir;
+    std::filesystem::path m_outputDir;
     cryptostore::Store m_store;
     SessionStore m_sessions;
     EncryptQueue m_queue;

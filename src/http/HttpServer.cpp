@@ -1,4 +1,6 @@
 #include "HttpServer.h"
+#include "Logger.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
@@ -44,6 +46,7 @@ private:
         }
 
         if ( ec ) {
+            LOG_WARN << "读取请求失败: " + ec.message();
             return;
         }
 
@@ -103,6 +106,7 @@ private:
 
     void onWrite( const error_code &ec, std::size_t ) {
         if ( ec ) {
+            LOG_WARN << "发送响应失败: " + ec.message();
             return;
         }
         doRead();
@@ -159,6 +163,7 @@ private:
 
     void onStreamChunk( const error_code &ec, std::size_t ) {
         if ( ec ) {
+            LOG_WARN << "发送数据块失败: " << "错误类型" << ec.category().name() << " 错误值" << ec.value();
             return;
         }
         writeNextChunk();
@@ -320,9 +325,11 @@ bool HttpServer::listen( const std::string &host, unsigned short port ) {
         m_acceptor.listen( asio::socket_base::max_listen_connections );
 
         m_running = true;
+        LOG_INFO << "HTTP 服务开始监听: " + host + ":" + std::to_string( port );
         doAccept();
         return true;
-    } catch ( const std::exception & ) {
+    } catch ( const std::exception &e ) {
+        LOG_ERROR << "监听地址失败: " + host + ":" + std::to_string( port ) + ", 原因: " + e.what();
         return false;
     }
 }
@@ -334,6 +341,7 @@ void HttpServer::stop() {
 
     error_code ec;
     m_acceptor.close( ec );
+    LOG_INFO << "HTTP 服务已停止";
 }
 
 asio::io_context &HttpServer::getIoContext() {
@@ -345,8 +353,10 @@ void HttpServer::doAccept() {
         asio::make_strand( m_ioc ),
         [this]( const error_code &ec, tcp::socket socket ) {
             if ( ec ) {
-                if ( m_running )
+                if ( m_running ) {
+                    LOG_WARN << "接受连接失败: " + ec.message();
                     doAccept();
+                }
                 return;
             }
 
@@ -359,6 +369,9 @@ void HttpServer::doAccept() {
 }
 
 void HttpServer::dispatch( const Request &req, Response &resp ) {
+    auto methodName = beast::http::to_string( req.method );
+    LOG_DEBUG << "处理请求: " + std::string( methodName.data(), methodName.size() ) + " " + req.target;
+
     for ( auto &mw : m_middlewares ) {
         if ( !mw( req, resp ) )
             return;

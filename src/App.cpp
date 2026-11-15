@@ -32,9 +32,10 @@ boost::json::array filesJson( const std::vector<cryptostore::FileEntry> &files )
 
 } // namespace
 
-App::App( const fs::path &baseDir )
-    : m_baseDir( baseDir ),
-      m_store( baseDir / "data" ),
+App::App( const fs::path &dataDir, const fs::path &outputDir )
+    : m_dataDir( dataDir ),
+      m_outputDir( outputDir ),
+      m_store( dataDir ),
       m_queue( m_store ) {
 }
 
@@ -43,12 +44,17 @@ App::~App() {
 }
 
 bool App::run( unsigned short port ) {
+    LOG_INFO << "正在注册 HTTP 路由";
     registerRoutes();
 
     if ( !m_server.listen( "127.0.0.1", port ) ) {
-        LOG_ERROR << "Failed to listen on port " + std::to_string( port );
+        LOG_ERROR << "监听端口失败: " + std::to_string( port );
         return false;
     }
+
+    LOG_INFO << "HTTP 服务已启动: http://127.0.0.1:" + std::to_string( port );
+    LOG_INFO << "存储目录: " << m_dataDir;
+    LOG_INFO << "导出目录: " << m_outputDir;
 
     m_queue.setCompletionHandler( [this]( const std::string &store, const cryptostore::StoreInfo &info ) {
         m_sessions.refreshDir( store, info );
@@ -56,16 +62,17 @@ bool App::run( unsigned short port ) {
 
     m_queue.start();
 
-    LOG_INFO << "Server started: http://127.0.0.1:" + std::to_string( port );
-    LOG_INFO << "Data directory: " + ( m_baseDir / "data" ).u8string();
-
+    LOG_INFO << "开始处理请求, 按 Ctrl+C 退出";
     m_server.getIoContext().run();
 
+    LOG_INFO << "事件循环已退出, 正在停止任务队列";
     m_queue.stop();
+    LOG_INFO << "服务已停止";
     return true;
 }
 
 void App::fail( Response &resp, int code, const std::string &reason, const std::string &message ) {
+    LOG_WARN << "请求处理失败: " + std::to_string( code ) + " " + reason + ", 原因: " + message;
     resp.setStatus( code, reason );
     resp.setText( message );
 }
@@ -93,6 +100,7 @@ void App::handleStores( const Request &, Response &resp ) {
     }
     root["stores"] = std::move( names );
 
+    LOG_DEBUG << "返回加密目录列表, 共 " + std::to_string( names.size() ) + " 个";
     resp.setJson( boost::json::serialize( root ) );
 }
 
@@ -122,6 +130,8 @@ void App::handleEncrypt( const Request &req, Response &resp ) {
         fail( resp, 500, "Internal Server Error", "创建加密任务失败" );
         return;
     }
+
+    LOG_INFO << "已创建加密任务: " + id + ", 源目录: " + dir;
 
     boost::json::object root;
     root["ok"] = true;
@@ -165,6 +175,8 @@ void App::handleTasks( const Request &, Response &resp ) {
     }
     root["tasks"] = std::move( items );
 
+    LOG_DEBUG << "返回任务列表, 进行中 " + std::to_string( tasks.size() ) +
+                     " 个, 已完成 " + std::to_string( finished ) + " 个";
     resp.setJson( boost::json::serialize( root ) );
 }
 
@@ -194,6 +206,8 @@ void App::handleOpen( const Request &req, Response &resp ) {
         fail( resp, 500, "Internal Server Error", "创建会话失败" );
         return;
     }
+
+    LOG_INFO << "已打开加密目录: " + dir + ", 文件数: " + std::to_string( info.files.size() );
 
     boost::json::object root;
     root["ok"] = true;
@@ -242,6 +256,8 @@ void App::handleAdd( const Request &req, Response &resp ) {
         return;
     }
 
+    LOG_INFO << "已创建添加任务: " + id + ", " + title;
+
     boost::json::object root;
     root["ok"] = true;
     root["id"] = utils::toJsonString( id );
@@ -281,6 +297,8 @@ void App::handleDelete( const Request &req, Response &resp ) {
         fail( resp, 500, "Internal Server Error", "加入任务队列失败" );
         return;
     }
+
+    LOG_INFO << "已创建删除任务: " + id + ", " + title;
 
     boost::json::object root;
     root["ok"] = true;
@@ -324,14 +342,16 @@ void App::handleExport( const Request &req, Response &resp ) {
         return;
     }
 
-    fs::path destRoot = m_baseDir / "output" / utils::toPath( session.dir );
-    std::string title = "导出 " + ( path.empty() ? session.dir : path ) + " 到 output";
+    fs::path destRoot = m_outputDir / utils::toPath( session.dir );
+    std::string title = "导出 " + ( path.empty() ? session.dir : path ) + " 到 " + destRoot.u8string();
 
     std::string id = m_queue.submitExport( session.dir, session.password, path, destRoot, title );
     if ( id.empty() ) {
         fail( resp, 500, "Internal Server Error", "加入任务队列失败" );
         return;
     }
+
+    LOG_INFO << "已创建导出任务: " + id + ", " + title;
 
     boost::json::object root;
     root["ok"] = true;
@@ -365,6 +385,8 @@ void App::handleFiles( const Request &req, Response &resp ) {
     root["ok"] = true;
     root["dir"] = utils::toJsonString( session.dir );
     root["files"] = filesJson( files );
+
+    LOG_DEBUG << "返回文件列表, 目录: " + session.dir + ", 文件数: " + std::to_string( files.size() );
     resp.setJson( boost::json::serialize( root ) );
 }
 
@@ -395,6 +417,9 @@ void App::handleFile( const Request &req, Response &resp ) {
     std::uint64_t length = entry.size;
     utils::RangeKind range = utils::parseRange(
         utils::findHeader( req.headers, "Range" ), entry.size, offset, length );
+
+    LOG_DEBUG << "读取文件: " + entry.path + ", 偏移: " + std::to_string( offset ) +
+                     ", 长度: " + std::to_string( length );
 
     if ( range == utils::RangeKind::Unsatisfiable ) {
         resp.setStatus( 416, "Range Not Satisfiable" );
@@ -457,6 +482,8 @@ void App::redirectPage( Response &resp, const std::string &path ) {
 
 void App::handleStatic( const Request &req, Response &resp ) {
     std::string path = utils::urlDecode( req.target );
+    LOG_DEBUG << "静态资源请求: " + path;
+
     std::string fullPath = std::string( RESOURCE_PREFIX ) + path;
     if ( serveResource( resp, fullPath ) ) {
         return;
